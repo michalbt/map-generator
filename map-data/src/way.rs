@@ -10,6 +10,6 @@ pub struct Way {
     id: WayId,
     tags: Tags,
     nodes: Vec<NodeId>,
-    formed_areas: Vec<AreaId>,
+    formed_areas: HashSet<AreaId>,
     containing_relations: HashSet<RelationId>,
 }
