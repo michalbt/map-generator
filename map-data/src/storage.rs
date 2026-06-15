@@ -15,16 +15,18 @@ pub struct Storage {
     areas: HashMap<AreaId, Area>,
     relations: HashMap<RelationId, Relation>,
     id_provider: IdProvider,
+    utm_zone_number: u8,
 }
 
 impl Storage {
-    pub fn new() -> Storage {
+    pub fn new(utm_zone_number: u8) -> Storage {
         Storage {
             nodes: HashMap::new(),
             ways: HashMap::new(),
             areas: HashMap::new(),
             relations: HashMap::new(),
             id_provider: IdProvider::new(),
+            utm_zone_number,
         }
     }
 }
