@@ -2,7 +2,7 @@ use slotmap::new_key_type;
 
 use crate::{
     location::Location,
-    object::{OsmId, Tags},
+    object::{OsmId, Tags, impl_object},
     relation::RelationKey,
     way::WayKey,
 };
@@ -17,3 +17,5 @@ pub struct Node {
     containing_ways: Vec<WayKey>,
     containing_relations: Vec<RelationKey>,
 }
+
+impl_object!(Node);

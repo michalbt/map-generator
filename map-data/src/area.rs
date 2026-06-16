@@ -1,7 +1,7 @@
 use slotmap::new_key_type;
 
 use crate::{
-    object::{OsmId, Tags},
+    object::{OsmId, Tags, impl_object},
     relation::RelationKey,
     way::WayKey,
 };
@@ -15,6 +15,8 @@ pub struct Area {
     rings: Vec<Ring>,
     containing_relations: Vec<RelationKey>,
 }
+
+impl_object!(Area);
 
 #[derive(Clone, Debug)]
 pub struct Ring {

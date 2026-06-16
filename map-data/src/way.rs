@@ -3,7 +3,7 @@ use slotmap::new_key_type;
 use crate::{
     area::AreaKey,
     node::NodeKey,
-    object::{OsmId, Tags},
+    object::{OsmId, Tags, impl_object},
     relation::RelationKey,
 };
 
@@ -17,3 +17,5 @@ pub struct Way {
     formed_areas: Vec<AreaKey>,
     containing_relations: Vec<RelationKey>,
 }
+
+impl_object!(Way);
