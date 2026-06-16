@@ -1,32 +1,29 @@
-use std::collections::HashMap;
+use slotmap::SlotMap;
 
 use crate::{
-    area::Area,
-    ids::{AreaId, IdProvider, NodeId, RelationId, WayId},
-    node::Node,
-    relation::Relation,
+    area::{Area, AreaKey},
+    node::{Node, NodeKey},
+    relation::{Relation, RelationKey},
     span::Span,
-    way::Way,
+    way::{Way, WayKey},
 };
 
 #[derive(Debug)]
 pub struct Storage {
-    nodes: HashMap<NodeId, Node>,
-    ways: HashMap<WayId, Way>,
-    areas: HashMap<AreaId, Area>,
-    relations: HashMap<RelationId, Relation>,
-    id_provider: IdProvider,
+    nodes: SlotMap<NodeKey, Node>,
+    ways: SlotMap<WayKey, Way>,
+    areas: SlotMap<AreaKey, Area>,
+    relations: SlotMap<RelationKey, Relation>,
     map_span: Span,
 }
 
 impl Storage {
     pub fn new(map_span: Span) -> Storage {
         Storage {
-            nodes: HashMap::new(),
-            ways: HashMap::new(),
-            areas: HashMap::new(),
-            relations: HashMap::new(),
-            id_provider: IdProvider::new(),
+            nodes: SlotMap::with_key(),
+            ways: SlotMap::with_key(),
+            areas: SlotMap::with_key(),
+            relations: SlotMap::with_key(),
             map_span,
         }
     }

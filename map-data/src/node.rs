@@ -1,16 +1,19 @@
-use std::collections::HashSet;
+use slotmap::new_key_type;
 
 use crate::{
-    ids::{NodeId, RelationId, WayId},
     location::Location,
-    object::Tags,
+    object::{OsmId, Tags},
+    relation::RelationKey,
+    way::WayKey,
 };
+
+new_key_type! { pub struct NodeKey; }
 
 #[derive(Clone, Debug)]
 pub struct Node {
-    id: NodeId,
+    osm_id: OsmId,
     location: Location,
     tags: Tags,
-    containing_ways: HashSet<WayId>,
-    containing_relations: HashSet<RelationId>,
+    containing_ways: Vec<WayKey>,
+    containing_relations: Vec<RelationKey>,
 }

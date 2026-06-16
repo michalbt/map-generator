@@ -1,16 +1,15 @@
-use std::collections::HashSet;
+use slotmap::new_key_type;
 
-use crate::{
-    ids::RelationId,
-    object::{ObjectHandle, Tags},
-};
+use crate::object::{ObjectHandle, OsmId, Tags};
+
+new_key_type! { pub struct RelationKey; }
 
 #[derive(Clone, Debug)]
 pub struct Relation {
-    id: RelationId,
+    osm_id: OsmId,
     tags: Tags,
     members: Vec<RelationMember>,
-    containing_relations: HashSet<RelationId>,
+    containing_relations: Vec<RelationKey>,
 }
 
 #[derive(Clone, Debug)]

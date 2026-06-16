@@ -1,22 +1,25 @@
-use std::collections::HashSet;
+use slotmap::new_key_type;
 
 use crate::{
-    ids::{AreaId, RelationId, WayId},
-    object::Tags,
+    object::{OsmId, Tags},
+    relation::RelationKey,
+    way::WayKey,
 };
+
+new_key_type! { pub struct AreaKey; }
 
 #[derive(Clone, Debug)]
 pub struct Area {
-    id: AreaId,
+    osm_id: OsmId,
     tags: Tags,
     rings: Vec<Ring>,
-    containing_relations: HashSet<RelationId>,
+    containing_relations: Vec<RelationKey>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Ring {
     pub role: RingRole,
-    pub ways: Vec<WayId>,
+    pub ways: Vec<WayKey>,
 }
 
 #[derive(Clone, Copy, Debug)]
