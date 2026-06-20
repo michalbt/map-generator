@@ -48,7 +48,7 @@ impl Node {
             .containing_ways
             .iter()
             .position(|k| *k == key)
-            .expect("node does not contain specified way");
+            .expect("specified WayKey is not a containing way for this Node");
         self.containing_ways.swap_remove(index);
     }
 }

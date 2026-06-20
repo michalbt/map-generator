@@ -38,6 +38,19 @@ impl Way {
     pub(crate) fn nodes_mut(&mut self) -> &mut Vec<NodeKey> {
         &mut self.nodes
     }
+
+    pub(crate) fn add_formed_area(&mut self, key: AreaKey) {
+        self.formed_areas.push(key);
+    }
+
+    pub(crate) fn remove_formed_area(&mut self, key: AreaKey) {
+        let index = self
+            .formed_areas
+            .iter()
+            .position(|k| *k == key)
+            .expect("specified AreaKey is not a formed area for this Way");
+        self.formed_areas.swap_remove(index);
+    }
 }
 
 impl_object!(Way);

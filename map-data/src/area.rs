@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use slotmap::new_key_type;
 
 use crate::{
@@ -16,6 +18,25 @@ pub struct Area {
     containing_relations: Vec<RelationKey>,
 }
 
+impl Area {
+    pub fn new(osm_id: OsmId, rings: Vec<Ring>) -> Self {
+        Self {
+            osm_id,
+            tags: HashMap::new(),
+            rings,
+            containing_relations: vec![],
+        }
+    }
+
+    pub fn rings(&self) -> &[Ring] {
+        &self.rings
+    }
+
+    pub fn rings_mut(&mut self) -> &mut Vec<Ring> {
+        &mut self.rings
+    }
+}
+
 impl_object!(Area);
 
 #[derive(Clone, Debug)]
@@ -28,4 +49,20 @@ pub struct Ring {
 pub enum RingRole {
     Outer,
     Inner,
+}
+
+impl Ring {
+    pub fn new_outer(ways: Vec<WayKey>) -> Self {
+        Self {
+            role: RingRole::Outer,
+            ways,
+        }
+    }
+
+    pub fn new_inner(ways: Vec<WayKey>) -> Self {
+        Self {
+            role: RingRole::Inner,
+            ways,
+        }
+    }
 }

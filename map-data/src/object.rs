@@ -6,15 +6,15 @@ pub type OsmId = Option<i64>;
 
 pub type Tags = HashMap<String, String>;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum ObjectHandle {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, From)]
+pub enum ObjectKey {
     Node(NodeKey),
     Way(WayKey),
     Area(AreaKey),
     Relation(RelationKey),
 }
 
-pub trait Object {
+pub trait Object: TrackContainingRelations {
     fn osm_id(&self) -> OsmId;
 
     fn tags(&self) -> &Tags;
@@ -38,6 +38,13 @@ pub trait Object {
     }
 }
 
+/// This trait is separate from Object because its methods need to be public only in this crate
+pub(crate) trait TrackContainingRelations {
+    fn add_containing_relation(&mut self, key: RelationKey);
+
+    fn remove_containing_relation(&mut self, key: RelationKey);
+}
+
 macro_rules! impl_object {
     ($t:ty) => {
         impl $crate::object::Object for $t {
@@ -53,6 +60,25 @@ macro_rules! impl_object {
                 &mut self.tags
             }
         }
+
+        impl $crate::object::TrackContainingRelations for $t {
+            fn add_containing_relation(&mut self, key: RelationKey) {
+                self.containing_relations.push(key);
+            }
+
+            fn remove_containing_relation(&mut self, key: RelationKey) {
+                let index = self
+                    .containing_relations
+                    .iter()
+                    .position(|k| *k == key)
+                    .expect(concat!(
+                        "specified RelationKey is not a containing relation for this ",
+                        stringify!($t)
+                    ));
+                self.containing_relations.swap_remove(index);
+            }
+        }
     };
 }
+use derive_more::From;
 pub(crate) use impl_object;
