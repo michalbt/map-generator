@@ -44,6 +44,10 @@ impl Storage {
         self.insert_node(Node::new(None, location))
     }
 
+    pub fn iter_nodes(&self) -> impl Iterator<Item = (NodeKey, &Node)> {
+        self.nodes.iter()
+    }
+
     pub fn contains_way(&self, key: WayKey) -> bool {
         self.ways.contains_key(key)
     }
@@ -73,6 +77,10 @@ impl Storage {
     pub fn remove_node_from_way(&mut self, way_key: WayKey, node_index: usize) {
         let node_key = self[way_key].nodes_mut().remove(node_index);
         self[node_key].remove_containing_way(way_key);
+    }
+
+    pub fn iter_ways(&self) -> impl Iterator<Item = (WayKey, &Way)> {
+        self.ways.iter()
     }
 
     pub fn contains_area(&self, key: AreaKey) -> bool {
@@ -106,6 +114,10 @@ impl Storage {
             self[way_key].remove_formed_area(area_key);
         }
         ring
+    }
+
+    pub fn iter_areas(&self) -> impl Iterator<Item = (AreaKey, &Area)> {
+        self.areas.iter()
     }
 
     pub fn contains_relation(&self, key: RelationKey) -> bool {
@@ -150,6 +162,26 @@ impl Storage {
         let member = self[relation_key].members_mut().remove(member_index);
         self[member.object].remove_containing_relation(relation_key);
         member
+    }
+
+    pub fn iter_relations(&self) -> impl Iterator<Item = (RelationKey, &Relation)> {
+        self.relations.iter()
+    }
+
+    pub fn iter_objects(&self) -> impl Iterator<Item = (ObjectKey, &dyn Object)> {
+        let nodes = self
+            .iter_nodes()
+            .map(|(node_key, node)| (ObjectKey::Node(node_key), node as &dyn Object));
+        let ways = self
+            .iter_ways()
+            .map(|(way_key, way)| (ObjectKey::Way(way_key), way as &dyn Object));
+        let areas = self
+            .iter_areas()
+            .map(|(area_key, area)| (ObjectKey::Area(area_key), area as &dyn Object));
+        let relations = self.iter_relations().map(|(relation_key, relation)| {
+            (ObjectKey::Relation(relation_key), relation as &dyn Object)
+        });
+        nodes.chain(ways).chain(areas).chain(relations)
     }
 }
 

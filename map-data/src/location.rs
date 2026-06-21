@@ -47,7 +47,7 @@ impl Location {
     }
 
     pub fn to_latitude_and_longitude(
-        &self,
+        self,
         map_span: &Span,
     ) -> Result<(f64, f64), LocationToLatitudeAndLongitudeError> {
         wsg84_utm_to_lat_lon(
