@@ -57,11 +57,7 @@ pub enum SpanError {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn utm_coordinates_are_close(left: f64, right: f64) -> bool {
-        const EPSILON: f64 = 1e-2;
-        return (left - right).abs() < EPSILON;
-    }
+    use crate::location::utm_coordinates_are_close;
 
     #[test]
     fn prague_north_east() {
