@@ -44,6 +44,20 @@ impl Storage {
         self.insert_node(Node::new(None, location))
     }
 
+    pub fn delete_node(&mut self, key: NodeKey) -> Result<Node, ObjectDeleteError> {
+        let node = self.nodes.get(key).ok_or(ObjectDeleteError::NotPresent)?;
+        if !node.containing_ways().is_empty() {
+            Err(ObjectDeleteError::ContainedInWay)
+        } else if !node.containing_relations().is_empty() {
+            Err(ObjectDeleteError::ContainedInRelation)
+        } else {
+            Ok(self
+                .nodes
+                .remove(key)
+                .expect("already checked that the object is present"))
+        }
+    }
+
     pub fn iter_nodes(&self) -> impl Iterator<Item = (NodeKey, &Node)> {
         self.nodes.iter()
     }
@@ -77,6 +91,23 @@ impl Storage {
     pub fn remove_node_from_way(&mut self, way_key: WayKey, node_index: usize) {
         let node_key = self[way_key].nodes_mut().remove(node_index);
         self[node_key].remove_containing_way(way_key);
+    }
+
+    pub fn delete_way(&mut self, key: WayKey) -> Result<Way, ObjectDeleteError> {
+        let way = self.ways.get(key).ok_or(ObjectDeleteError::NotPresent)?;
+        if !way.formed_areas().is_empty() {
+            Err(ObjectDeleteError::ContainedInArea)
+        } else if !way.containing_relations().is_empty() {
+            Err(ObjectDeleteError::ContainedInRelation)
+        } else {
+            for &node_key in way.nodes() {
+                self.nodes[node_key].remove_containing_way(key);
+            }
+            Ok(self
+                .ways
+                .remove(key)
+                .expect("already checked that the object is present"))
+        }
     }
 
     pub fn iter_ways(&self) -> impl Iterator<Item = (WayKey, &Way)> {
@@ -114,6 +145,23 @@ impl Storage {
             self[way_key].remove_formed_area(area_key);
         }
         ring
+    }
+
+    pub fn delete_area(&mut self, key: AreaKey) -> Result<Area, ObjectDeleteError> {
+        let area = self.areas.get(key).ok_or(ObjectDeleteError::NotPresent)?;
+        if !area.containing_relations().is_empty() {
+            Err(ObjectDeleteError::ContainedInRelation)
+        } else {
+            for ring in area.rings() {
+                for &way_key in &ring.ways {
+                    self.ways[way_key].remove_formed_area(key);
+                }
+            }
+            Ok(self
+                .areas
+                .remove(key)
+                .expect("already checked that the object is present"))
+        }
     }
 
     pub fn iter_areas(&self) -> impl Iterator<Item = (AreaKey, &Area)> {
@@ -162,6 +210,24 @@ impl Storage {
         let member = self[relation_key].members_mut().remove(member_index);
         self[member.object].remove_containing_relation(relation_key);
         member
+    }
+
+    pub fn delete_relation(&mut self, key: RelationKey) -> Result<Relation, ObjectDeleteError> {
+        let relation = self
+            .relations
+            .get(key)
+            .ok_or(ObjectDeleteError::NotPresent)?;
+        if !relation.containing_relations().is_empty() {
+            Err(ObjectDeleteError::ContainedInRelation)
+        } else {
+            for member in &relation.members().to_vec() {
+                self[member.object].remove_containing_relation(key);
+            }
+            Ok(self
+                .relations
+                .remove(key)
+                .expect("already checked that the object is present"))
+        }
     }
 
     pub fn iter_relations(&self) -> impl Iterator<Item = (RelationKey, &Relation)> {
@@ -228,6 +294,23 @@ impl IndexMut<ObjectKey> for Storage {
             ObjectKey::Way(way_key) => &mut self[way_key],
             ObjectKey::Area(area_key) => &mut self[area_key],
             ObjectKey::Relation(relation_key) => &mut self[relation_key],
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ObjectDeleteError {
+    NotPresent,
+    ContainedInWay,
+    ContainedInArea,
+    ContainedInRelation,
+}
+
+impl ObjectDeleteError {
+    pub fn is_contained_in_object(self) -> bool {
+        match self {
+            Self::NotPresent => false,
+            Self::ContainedInWay | Self::ContainedInArea | Self::ContainedInRelation => true,
         }
     }
 }
@@ -428,5 +511,35 @@ mod tests {
                 (ObjectKey::Relation(relation_key), Some(4)),
             ],
         );
+    }
+
+    #[test]
+    fn object_deletion() {
+        let mut storage = create_storage();
+        let node_key = storage.insert_node(Node::new(Some(0), Location::new(12345.0, 67890.0)));
+        let way_key = storage.insert_way(Way::new(Some(1), vec![node_key]));
+        assert_eq!(
+            storage.delete_node(node_key),
+            Err(ObjectDeleteError::ContainedInWay)
+        );
+        assert_eq!(
+            storage.delete_way(way_key),
+            Ok(Way::new(Some(1), vec![node_key]))
+        );
+        assert_eq!(storage.iter_nodes().count(), 1);
+        assert!(storage.contains_node(node_key));
+        assert_eq!(storage.iter_ways().count(), 0);
+        assert!(!storage.contains_way(way_key));
+        assert!(storage[node_key].containing_ways().is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid SlotMap key used")]
+    fn deleted_key_access() {
+        let mut storage = create_storage();
+        let node_key = storage.create_node(Location::new(111.0, 222.0));
+        assert!(storage.delete_node(node_key).is_ok());
+        storage.create_node(Location::new(333.0, 444.0));
+        let _ = storage[node_key];
     }
 }
