@@ -11,7 +11,7 @@ use crate::{
 
 new_key_type! { pub struct NodeKey; }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Node {
     osm_id: OsmId,
     location: Location,
@@ -37,6 +37,10 @@ impl Node {
 
     pub fn set_location(&mut self, new_location: Location) {
         self.location = new_location;
+    }
+
+    pub fn containing_ways(&self) -> &[WayKey] {
+        &self.containing_ways
     }
 
     pub(crate) fn add_containing_way(&mut self, key: WayKey) {

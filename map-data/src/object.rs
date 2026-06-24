@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 use crate::{area::AreaKey, node::NodeKey, relation::RelationKey, way::WayKey};
 
@@ -20,6 +20,8 @@ pub trait Object: TrackContainingRelations {
     fn tags(&self) -> &Tags;
 
     fn tags_mut(&mut self) -> &mut Tags;
+
+    fn containing_relations(&self) -> &[RelationKey];
 
     fn has_tag(&self, tag: &str) -> bool {
         self.tags().contains_key(tag)
@@ -58,6 +60,10 @@ macro_rules! impl_object {
 
             fn tags_mut(&mut self) -> &mut $crate::object::Tags {
                 &mut self.tags
+            }
+
+            fn containing_relations(&self) -> &[RelationKey] {
+                &self.containing_relations
             }
         }
 

@@ -6,7 +6,7 @@ use crate::object::{ObjectKey, OsmId, Tags, impl_object};
 
 new_key_type! { pub struct RelationKey; }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Relation {
     osm_id: OsmId,
     tags: Tags,
@@ -35,7 +35,7 @@ impl Relation {
 
 impl_object!(Relation);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelationMember {
     pub object: ObjectKey,
     pub role: Option<String>,

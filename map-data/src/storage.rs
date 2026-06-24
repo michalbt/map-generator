@@ -231,3 +231,202 @@ impl IndexMut<ObjectKey> for Storage {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fmt::Debug;
+
+    use crate::area::RingRole;
+
+    use super::*;
+
+    fn create_storage() -> Storage {
+        Storage::new(Span::new((49.9460, 14.1918), (50.1787, 14.7209)).unwrap())
+    }
+
+    fn assert_same_elements<T: PartialEq + Debug>(left: &[T], right: &[T]) {
+        assert_eq!(left.len(), right.len(), "lengths do not match");
+        for left_element in left {
+            let left_count = left.iter().filter(|x| *x == left_element).count();
+            let right_count = right.iter().filter(|x| *x == left_element).count();
+            assert_eq!(
+                left_count, right_count,
+                "counts for element {:?} do not match",
+                left_element
+            );
+        }
+    }
+
+    #[test]
+    fn object_insertion_and_manipulation() {
+        let mut storage = create_storage();
+        const NODE_COUNT: usize = 4;
+        let node_locations = (0..4)
+            .map(|i| Location::new(111111.0 * i as f64, 222222.0 * i as f64))
+            .collect::<Vec<_>>();
+        let node_keys = node_locations
+            .iter()
+            .enumerate()
+            .map(|(i, location)| storage.insert_node(Node::new(Some(i as i64), *location)))
+            .collect::<Vec<_>>();
+        for i in 0..NODE_COUNT {
+            let key = node_keys[i];
+            assert!(storage.contains_node(key));
+            let node = &storage[key];
+            assert_eq!(node.location(), node_locations[i]);
+            assert_eq!(node.osm_id(), Some(i as i64));
+        }
+
+        let way0 = Way::new(
+            Some(10),
+            vec![node_keys[0], node_keys[3], node_keys[1], node_keys[2]],
+        );
+        let way0_key = storage.insert_way(way0);
+        assert!(storage.contains_way(way0_key));
+        storage.remove_node_from_way(way0_key, 1);
+        assert_eq!(
+            storage[way0_key].nodes(),
+            vec![node_keys[0], node_keys[1], node_keys[2]]
+        );
+
+        let way1 = Way::new(Some(11), vec![]);
+        let way1_key = storage.insert_way(way1);
+        storage.append_node_to_way(way1_key, node_keys[3]);
+        storage.insert_node_to_way(way1_key, node_keys[2], 0);
+        storage.insert_node_to_way(way1_key, node_keys[0], 2);
+        assert_eq!(
+            storage[way1_key].nodes(),
+            vec![node_keys[2], node_keys[3], node_keys[0]]
+        );
+
+        let way2 = Way::new(
+            Some(12),
+            vec![node_keys[0], node_keys[1], node_keys[2], node_keys[0]],
+        ); // closed way
+        let way2_key = storage.insert_way(way2);
+
+        assert_same_elements(
+            storage[node_keys[0]].containing_ways(),
+            &[way0_key, way1_key, way2_key, way2_key],
+        );
+        assert_same_elements(
+            storage[node_keys[1]].containing_ways(),
+            &[way0_key, way2_key],
+        );
+        assert_same_elements(
+            storage[node_keys[2]].containing_ways(),
+            &[way0_key, way1_key, way2_key],
+        );
+        assert_same_elements(storage[node_keys[3]].containing_ways(), &[way1_key]);
+
+        let area = Area::new(Some(20), vec![Ring::new_inner(vec![way0_key, way1_key])]);
+        let area_key = storage.insert_area(area);
+        assert!(storage.contains_area(area_key));
+
+        storage.remove_ring_from_area(area_key, 0);
+        storage.add_ring_to_area(area_key, Ring::new_outer(vec![way0_key, way1_key]));
+        assert_same_elements(
+            storage[area_key].rings(),
+            &[Ring {
+                role: RingRole::Outer,
+                ways: vec![way0_key, way1_key],
+            }],
+        );
+
+        assert_same_elements(storage[way0_key].formed_areas(), &[area_key]);
+        assert_same_elements(storage[way1_key].formed_areas(), &[area_key]);
+
+        let relation = Relation::new(
+            Some(30),
+            vec![
+                RelationMember::new(node_keys[0], Some("first".into())),
+                RelationMember::new(way0_key, None),
+                RelationMember::new(area_key, Some("area".into())),
+            ],
+        );
+        let relation_key = storage.insert_relation(relation);
+        assert!(storage.contains_relation(relation_key));
+
+        storage.insert_member_to_relation(
+            relation_key,
+            RelationMember::new(area_key, Some("also area".into())),
+            1,
+        );
+        storage.append_member_to_relation(
+            relation_key,
+            RelationMember::new(relation_key, Some("itself".into())),
+        );
+        storage.remove_member_from_relation(relation_key, 0);
+
+        assert_eq!(
+            storage[relation_key].members(),
+            &[
+                RelationMember {
+                    object: ObjectKey::Area(area_key),
+                    role: Some("also area".into()),
+                },
+                RelationMember {
+                    object: ObjectKey::Way(way0_key),
+                    role: None,
+                },
+                RelationMember {
+                    object: ObjectKey::Area(area_key),
+                    role: Some("area".into()),
+                },
+                RelationMember {
+                    object: ObjectKey::Relation(relation_key),
+                    role: Some("itself".into()),
+                },
+            ],
+        );
+
+        assert_same_elements(storage[node_keys[0]].containing_relations(), &[]);
+        assert_same_elements(storage[way0_key].containing_relations(), &[relation_key]);
+        assert_same_elements(
+            storage[area_key].containing_relations(),
+            &[relation_key, relation_key],
+        );
+        assert_same_elements(
+            storage[relation_key].containing_relations(),
+            &[relation_key],
+        );
+    }
+
+    #[test]
+    fn object_iteration() {
+        let mut storage = create_storage();
+        let node_key = storage.insert_node(Node::new(Some(1), Location::new(12345.0, 67890.0)));
+        let way_key = storage.insert_way(Way::new(Some(2), vec![]));
+        let area_key = storage.insert_area(Area::new(Some(3), vec![]));
+        let relation_key = storage.insert_relation(Relation::new(Some(4), vec![]));
+
+        assert_same_elements(
+            &storage.iter_nodes().collect::<Vec<_>>(),
+            &[(node_key, &storage[node_key])],
+        );
+        assert_same_elements(
+            &storage.iter_ways().collect::<Vec<_>>(),
+            &[(way_key, &storage[way_key])],
+        );
+        assert_same_elements(
+            &storage.iter_areas().collect::<Vec<_>>(),
+            &[(area_key, &storage[area_key])],
+        );
+        assert_same_elements(
+            &storage.iter_relations().collect::<Vec<_>>(),
+            &[(relation_key, &storage[relation_key])],
+        );
+        assert_same_elements(
+            &storage
+                .iter_objects()
+                .map(|(key, obj)| (key, obj.osm_id()))
+                .collect::<Vec<_>>(),
+            &[
+                (ObjectKey::Node(node_key), Some(1)),
+                (ObjectKey::Way(way_key), Some(2)),
+                (ObjectKey::Area(area_key), Some(3)),
+                (ObjectKey::Relation(relation_key), Some(4)),
+            ],
+        );
+    }
+}

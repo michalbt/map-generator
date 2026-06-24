@@ -11,7 +11,7 @@ use crate::{
 
 new_key_type! { pub struct WayKey; }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Way {
     osm_id: OsmId,
     tags: Tags,
@@ -37,6 +37,10 @@ impl Way {
 
     pub(crate) fn nodes_mut(&mut self) -> &mut Vec<NodeKey> {
         &mut self.nodes
+    }
+
+    pub fn formed_areas(&self) -> &[AreaKey] {
+        &self.formed_areas
     }
 
     pub(crate) fn add_formed_area(&mut self, key: AreaKey) {

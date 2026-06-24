@@ -10,7 +10,7 @@ use crate::{
 
 new_key_type! { pub struct AreaKey; }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Area {
     osm_id: OsmId,
     tags: Tags,
@@ -39,13 +39,13 @@ impl Area {
 
 impl_object!(Area);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ring {
     pub role: RingRole,
     pub ways: Vec<WayKey>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RingRole {
     Outer,
     Inner,
