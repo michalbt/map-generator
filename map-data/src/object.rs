@@ -1,5 +1,7 @@
 use std::{collections::HashMap, fmt::Debug};
 
+use derive_more::From;
+
 use crate::{area::AreaKey, node::NodeKey, relation::RelationKey, way::WayKey};
 
 pub type OsmId = Option<i64>;
@@ -14,6 +16,7 @@ pub enum ObjectKey {
     Relation(RelationKey),
 }
 
+#[allow(private_bounds)]
 pub trait Object: TrackContainingRelations {
     fn osm_id(&self) -> OsmId;
 
@@ -86,5 +89,4 @@ macro_rules! impl_object {
         }
     };
 }
-use derive_more::From;
 pub(crate) use impl_object;

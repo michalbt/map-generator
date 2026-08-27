@@ -3,7 +3,7 @@ use std::ops::{Index, IndexMut};
 use slotmap::SlotMap;
 
 use crate::{
-    area::{Area, AreaKey, Ring},
+    area::{Area, AreaKey, AreaSource, Ring},
     location::Location,
     node::{Node, NodeKey},
     object::{Object, ObjectKey},
@@ -129,7 +129,7 @@ impl Storage {
     }
 
     pub fn create_area(&mut self, rings: Vec<Ring>) -> AreaKey {
-        self.insert_area(Area::new(None, rings))
+        self.insert_area(Area::new(None, AreaSource::None, rings))
     }
 
     pub fn add_ring_to_area(&mut self, area_key: AreaKey, ring: Ring) {
@@ -402,7 +402,11 @@ mod tests {
         );
         assert_same_elements(storage[node_keys[3]].containing_ways(), &[way1_key]);
 
-        let area = Area::new(Some(20), vec![Ring::new_inner(vec![way0_key, way1_key])]);
+        let area = Area::new(
+            Some(20),
+            AreaSource::None,
+            vec![Ring::new_inner(vec![way0_key, way1_key])],
+        );
         let area_key = storage.insert_area(area);
         assert!(storage.contains_area(area_key));
 
@@ -480,7 +484,7 @@ mod tests {
         let mut storage = create_storage();
         let node_key = storage.insert_node(Node::new(Some(1), Location::new(12345.0, 67890.0)));
         let way_key = storage.insert_way(Way::new(Some(2), vec![]));
-        let area_key = storage.insert_area(Area::new(Some(3), vec![]));
+        let area_key = storage.insert_area(Area::new(Some(3), AreaSource::None, vec![]));
         let relation_key = storage.insert_relation(Relation::new(Some(4), vec![]));
 
         assert_same_elements(
