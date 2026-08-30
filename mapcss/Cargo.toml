@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 cssparser = "0.37.0"
 map-data = { version = "0.1.0", path = "../map-data" }
+regex = "1.13.1"
