@@ -92,12 +92,19 @@ impl Parse for TagValue {
     }
 }
 
+fn create_regex_with_anchors(string: &str) -> Result<Regex, ()> {
+    let add_start = if string.starts_with('^') { "" } else { "^" };
+    let add_end = if string.ends_with('$') { "" } else { "$" };
+    let full: String = add_start.to_owned() + string + add_end;
+    regex::Regex::new(&full).map(Regex).map_err(|_| ())
+}
+
 impl Parse for Regex {
     /// Only quoted regexes are supported
+    /// TODO: quote with slashes
     fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
         if let Ok(string) = input.try_parse(|inp| inp.expect_string().map(ToString::to_string)) {
-            regex::Regex::new(&string)
-                .map(Regex)
+            create_regex_with_anchors(&string)
                 .map_err(|_| input.new_custom_error(MapCssErrorKind::InvalidRegex))
         } else {
             Err(input.new_custom_error(MapCssErrorKind::RegexExpected))

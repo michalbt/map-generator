@@ -2,7 +2,6 @@ use cssparser::Parser;
 
 use crate::error::MapCssParseError;
 
-mod common;
 mod selector;
 
 pub(crate) trait Parse {

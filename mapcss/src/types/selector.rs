@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use map_data::{AreaSource, ObjectKey, Storage};
 
 pub(crate) trait Selector {
@@ -154,7 +156,36 @@ pub(crate) enum Test {
 
 impl Selector for Test {
     fn matches(&self, key: ObjectKey, storage: &Storage) -> bool {
-        todo!()
+        let object_tags = storage[key].tags();
+        match self {
+            Self::Set(TagKey(tag_key)) => object_tags.contains_key(tag_key),
+            Self::NotSet(TagKey(tag_key)) => !object_tags.contains_key(tag_key),
+            Self::Equal(TagKey(tag_key), tag_value) => object_tags
+                .get(tag_key)
+                .is_some_and(|val| *tag_value == **val),
+            Self::NotEqual(TagKey(tag_key), tag_value) => object_tags
+                .get(tag_key)
+                .is_some_and(|val| *tag_value != **val),
+            Self::LessThan(TagKey(tag_key), tag_value) => object_tags
+                .get(tag_key)
+                .and_then(|s| s.parse::<TagNumericValue>().ok())
+                .is_some_and(|val| val < *tag_value),
+            Self::LessThanOrEqual(TagKey(tag_key), tag_value) => object_tags
+                .get(tag_key)
+                .and_then(|s| s.parse::<TagNumericValue>().ok())
+                .is_some_and(|val| val <= *tag_value),
+            Self::GreaterThan(TagKey(tag_key), tag_value) => object_tags
+                .get(tag_key)
+                .and_then(|s| s.parse::<TagNumericValue>().ok())
+                .is_some_and(|val| val > *tag_value),
+            Self::GreaterThanOrEqual(TagKey(tag_key), tag_value) => object_tags
+                .get(tag_key)
+                .and_then(|s| s.parse::<TagNumericValue>().ok())
+                .is_some_and(|val| val >= *tag_value),
+            Self::Matches(TagKey(tag_key), Regex(regex)) => object_tags
+                .get(tag_key)
+                .is_some_and(|val| regex.is_match(val)),
+        }
     }
 }
 
@@ -167,10 +198,50 @@ pub(crate) enum TagValue {
     String(TagStringValue),
 }
 
+impl PartialEq<str> for TagValue {
+    fn eq(&self, other: &str) -> bool {
+        match self {
+            TagValue::Numeric(numeric_value) => other
+                .parse::<TagNumericValue>()
+                .is_ok_and(|val| val == *numeric_value),
+            TagValue::String(TagStringValue(string_value)) => *other == *string_value,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum TagNumericValue {
     Integer(i32),
     Float(f32),
+}
+
+impl FromStr for TagNumericValue {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(integer) = s.parse::<i32>() {
+            Ok(Self::Integer(integer))
+        } else if let Ok(float) = s.parse::<f32>() {
+            Ok(Self::Float(float))
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl PartialOrd<Self> for TagNumericValue {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (Self::Integer(left), Self::Integer(right)) => left.partial_cmp(right),
+            (Self::Float(left), Self::Float(right)) => left.partial_cmp(right),
+            (Self::Integer(left), Self::Float(right)) => {
+                (*left as f64).partial_cmp(&(*right as f64))
+            }
+            (Self::Float(left), Self::Integer(right)) => {
+                (*left as f64).partial_cmp(&(*right as f64))
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
