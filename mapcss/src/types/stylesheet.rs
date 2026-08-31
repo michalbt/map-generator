@@ -1,4 +1,4 @@
-use crate::selector::SelectorAlternatives;
+use crate::types::selector::SelectorAlternatives;
 
 pub struct Stylesheet {
     rules: Vec<Rule>,

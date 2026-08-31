@@ -1,4 +1,3 @@
-use cssparser::Parser;
 use map_data::{AreaSource, ObjectKey, Storage};
 
 pub(crate) trait Selector {
@@ -10,6 +9,12 @@ pub(crate) struct SelectorAlternatives {
     alternatives: Vec<SelectorChain>,
 }
 
+impl SelectorAlternatives {
+    pub fn new(alternatives: Vec<SelectorChain>) -> Self {
+        Self { alternatives }
+    }
+}
+
 impl Selector for SelectorAlternatives {
     fn matches(&self, key: ObjectKey, storage: &Storage) -> bool {
         self.alternatives
@@ -19,21 +24,15 @@ impl Selector for SelectorAlternatives {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct SelectorChain {
+pub(crate) struct SelectorChain {
     chain: Vec<BasicSelector>,
 }
 
-impl Selector for SelectorChain {
-    fn matches(&self, key: ObjectKey, storage: &Storage) -> bool {
-        if let Some((last_selector, parent_subchain)) = self.chain.split_last() {
-            Self::selector_subchain_matches(last_selector, parent_subchain, key, storage)
-        } else {
-            false
-        }
-    }
-}
-
 impl SelectorChain {
+    pub fn new(chain: Vec<BasicSelector>) -> Self {
+        Self { chain }
+    }
+
     fn selector_subchain_matches(
         selector: &BasicSelector,
         parent_subchain: &[BasicSelector],
@@ -77,10 +76,26 @@ impl SelectorChain {
     }
 }
 
+impl Selector for SelectorChain {
+    fn matches(&self, key: ObjectKey, storage: &Storage) -> bool {
+        if let Some((last_selector, parent_subchain)) = self.chain.split_last() {
+            Self::selector_subchain_matches(last_selector, parent_subchain, key, storage)
+        } else {
+            false
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
-struct BasicSelector {
+pub(crate) struct BasicSelector {
     object_type: ObjectType,
     tests: Vec<Test>,
+}
+
+impl BasicSelector {
+    pub fn new(object_type: ObjectType, tests: Vec<Test>) -> Self {
+        Self { object_type, tests }
+    }
 }
 
 impl Selector for BasicSelector {
@@ -91,7 +106,7 @@ impl Selector for BasicSelector {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ObjectType {
+pub(crate) enum ObjectType {
     Node,
     Way,
     Relation,
@@ -99,34 +114,6 @@ enum ObjectType {
     Line,
     Canvas,
     Any,
-}
-
-impl ObjectType {
-    pub fn parse(input: &mut Parser) -> Result<Self, ()> {
-        fn parse_identifier_object_type(input: &mut Parser) -> Result<ObjectType, ()> {
-            if let Ok(identifier) = input.expect_ident() {
-                match &**identifier {
-                    "node" => Ok(ObjectType::Node),
-                    "way" => Ok(ObjectType::Way),
-                    "relation" => Ok(ObjectType::Relation),
-                    "area" => Ok(ObjectType::Area),
-                    "line" => Ok(ObjectType::Line),
-                    "canvas" => Ok(ObjectType::Canvas),
-                    _ => Err(()),
-                }
-            } else {
-                Err(())
-            }
-        }
-
-        if let Ok(object_type) = input.try_parse(parse_identifier_object_type) {
-            Ok(object_type)
-        } else if let Ok(()) = input.expect_delim('*') {
-            Ok(ObjectType::Any)
-        } else {
-            Err(())
-        }
-    }
 }
 
 impl Selector for ObjectType {
@@ -153,7 +140,7 @@ impl Selector for ObjectType {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum Test {
+pub(crate) enum Test {
     Set(TagKey),
     NotSet(TagKey),
     Equal(TagKey, TagValue),
@@ -165,12 +152,6 @@ enum Test {
     Matches(TagKey, Regex),
 }
 
-impl Test {
-    pub fn parse(input: &mut Parser) -> Result<Self, ()> {
-        todo!()
-    }
-}
-
 impl Selector for Test {
     fn matches(&self, key: ObjectKey, storage: &Storage) -> bool {
         todo!()
@@ -178,78 +159,25 @@ impl Selector for Test {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct TagKey(pub String);
-
-impl TagKey {
-    pub fn parse(input: &mut Parser) -> Result<Self, ()> {
-        input
-            .expect_ident_or_string()
-            .map(|s| TagKey(s.to_string()))
-            .map_err(|_| ())
-    }
-}
+pub(crate) struct TagKey(pub String);
 
 #[derive(Clone, Debug, PartialEq)]
-enum TagValue {
+pub(crate) enum TagValue {
     Numeric(TagNumericValue),
     String(TagStringValue),
 }
 
-impl TagValue {
-    pub fn parse(input: &mut Parser) -> Result<Self, ()> {
-        if let Ok(numeric) = input.try_parse(TagNumericValue::parse) {
-            Ok(Self::Numeric(numeric))
-        } else if let Ok(string) = TagStringValue::parse(input) {
-            Ok(Self::String(string))
-        } else {
-            Err(())
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
-enum TagNumericValue {
+pub(crate) enum TagNumericValue {
     Integer(i32),
     Float(f32),
 }
 
-impl TagNumericValue {
-    pub fn parse(input: &mut Parser) -> Result<Self, ()> {
-        if let Ok(integer) = input.try_parse(|inp| inp.expect_integer()) {
-            Ok(Self::Integer(integer))
-        } else if let Ok(float) = input.expect_number() {
-            Ok(Self::Float(float))
-        } else {
-            Err(())
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
-struct TagStringValue(pub String);
-
-impl TagStringValue {
-    pub fn parse(input: &mut Parser) -> Result<Self, ()> {
-        input
-            .expect_ident_or_string()
-            .map(|s| TagStringValue(s.to_string()))
-            .map_err(|_| ())
-    }
-}
+pub(crate) struct TagStringValue(pub String);
 
 #[derive(Clone, Debug)]
-struct Regex(pub regex::Regex);
-
-impl Regex {
-    /// Only quoted regexes are supported
-    pub fn parse(input: &mut Parser) -> Result<Self, ()> {
-        input
-            .expect_string()
-            .map_err(|_| ())
-            .and_then(|s| regex::Regex::new(s).map_err(|_| ()))
-            .map(Regex)
-    }
-}
+pub(crate) struct Regex(pub regex::Regex);
 
 impl PartialEq for Regex {
     fn eq(&self, other: &Self) -> bool {
