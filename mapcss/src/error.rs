@@ -12,6 +12,13 @@ pub enum MapCssErrorKind {
     TagKeyOrExclamationExpected,
     InvalidTokenInsideTest,
     SelectorChainExpected,
+    InvalidHashColor,
+    ColorUnitFloatExpected,
+    ColorUnitFloatOutOfRange,
+    CommaExpected,
+    ColorAlphaUnitFloatExpected,
+    ColorAlphaUnitFloatOutOfRange,
+    ColorExpected,
 }
 
 pub type MapCssParseError<'i> = ParseError<'i, MapCssErrorKind>;
