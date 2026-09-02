@@ -19,6 +19,14 @@ pub enum MapCssErrorKind {
     ColorAlphaUnitFloatExpected,
     ColorAlphaUnitFloatOutOfRange,
     ColorExpected,
+    CommaSeparatedIntegerListExpected,
+    CommaSeparatedIntegerListTooShort,
+    IntegerExpected,
+    PropertyValueExpected,
+    PropertyNameExpected,
+    ColonExpected,
+    SemicolonExpected,
+    DeclarationBlockExpected,
 }
 
 pub type MapCssParseError<'i> = ParseError<'i, MapCssErrorKind>;

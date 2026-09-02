@@ -144,7 +144,7 @@ fn parse_matches_operator(input: &mut Parser) -> Result<(), ()> {
     input.expect_delim('~').map_err(|_| ())
 }
 
-fn parse_test_contents<'i>(input: &mut Parser<'i, '_>) -> Result<Test, MapCssParseError<'i>> {
+fn parse_test_content<'i>(input: &mut Parser<'i, '_>) -> Result<Test, MapCssParseError<'i>> {
     if let Ok(()) = input.try_parse(|inp| inp.expect_delim('!')) {
         TagKey::parse(input).map(Test::NotSet)
     } else if let Ok(tag_key) = input.try_parse(TagKey::parse) {
@@ -178,7 +178,7 @@ impl Parse for Test {
         input
             .try_parse(|inp| inp.expect_square_bracket_block())
             .map_err(|_| input.new_custom_error(MapCssErrorKind::TestBlockExpected))?;
-        input.parse_nested_block(parse_test_contents)
+        input.parse_nested_block(parse_test_content)
     }
 }
 

@@ -1,12 +1,15 @@
 use cssparser::{
-    Parser, Token,
+    ParseErrorKind, Parser, Token,
     color::{OPAQUE, clamp_unit_f32, parse_hash_color},
 };
 
 use crate::{
     error::{MapCssErrorKind, MapCssParseError},
     parser::Parse,
-    types::stylesheet::{Declaration, PropertyValue, Rule, Stylesheet},
+    types::{
+        selector::SelectorAlternatives,
+        stylesheet::{Declaration, PropertyValue, Rule, Stylesheet},
+    },
 };
 
 fn parse_hash_token(input: &mut Parser) -> Result<String, ()> {
@@ -85,26 +88,122 @@ fn parse_color<'i>(input: &mut Parser<'i, '_>) -> Result<(u8, u8, u8, f32), MapC
     }
 }
 
+/// Parses a comma-separated list with at least 2 elements.
+fn parse_comma_separated_integer_list<'i>(
+    input: &mut Parser<'i, '_>,
+) -> Result<Vec<i32>, MapCssParseError<'i>> {
+    let first = input
+        .try_parse(|inp| inp.expect_integer())
+        .map_err(|_| input.new_custom_error(MapCssErrorKind::CommaSeparatedIntegerListExpected))?;
+    input
+        .try_parse(parse_comma)
+        .map_err(|_| input.new_custom_error(MapCssErrorKind::CommaSeparatedIntegerListTooShort))?;
+    let second = input
+        .try_parse(|inp| inp.expect_integer())
+        .map_err(|_| input.new_custom_error(MapCssErrorKind::IntegerExpected))?;
+    let mut list = vec![first, second];
+
+    while let Ok(()) = parse_comma(input) {
+        let integer = input
+            .try_parse(|inp| inp.expect_integer())
+            .map_err(|_| input.new_custom_error(MapCssErrorKind::IntegerExpected))?;
+        list.push(integer);
+    }
+    Ok(list)
+}
+
 impl Parse for PropertyValue {
     fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
-        todo!()
+        match input.try_parse(parse_comma_separated_integer_list) {
+            Ok(list) => return Ok(Self::IntegerList(list)),
+            Err(e)
+                if matches!(
+                    e.kind,
+                    ParseErrorKind::Custom(
+                        MapCssErrorKind::CommaSeparatedIntegerListExpected
+                            | MapCssErrorKind::CommaSeparatedIntegerListTooShort
+                    )
+                ) => {} // continue with a different parser
+            Err(e) => return Err(e),
+        }
+        match input.try_parse(parse_color) {
+            Ok((r, g, b, a)) => return Ok(Self::Color(r, g, b, a)),
+            Err(e)
+                if matches!(
+                    e.kind,
+                    ParseErrorKind::Custom(MapCssErrorKind::ColorExpected)
+                ) => {} // continue with a different parser
+            Err(e) => return Err(e),
+        }
+        if let Ok(percentage) = input.try_parse(|inp| inp.expect_percentage()) {
+            Ok(Self::Percentage(percentage))
+        } else if let Ok(url) = input.try_parse(|inp| inp.expect_url()) {
+            Ok(Self::Url(url.to_string()))
+        } else if let Ok(integer) = input.try_parse(|inp| inp.expect_integer()) {
+            Ok(Self::Integer(integer))
+        } else if let Ok(float) = input.try_parse(|inp| inp.expect_number()) {
+            Ok(Self::Float(float))
+        } else if let Ok(string) =
+            input.try_parse(|inp| inp.expect_ident_or_string().map(ToString::to_string))
+        {
+            Ok(Self::String(string))
+        } else {
+            Err(input.new_custom_error(MapCssErrorKind::PropertyValueExpected))
+        }
     }
 }
 
 impl Parse for Declaration {
     fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
-        todo!()
+        let property_name = input
+            .try_parse(|inp| inp.expect_ident().map(ToString::to_string))
+            .map_err(|_| input.new_custom_error(MapCssErrorKind::PropertyNameExpected))?;
+        input
+            .try_parse(|inp| inp.expect_colon())
+            .map_err(|_| input.new_custom_error(MapCssErrorKind::ColonExpected))?;
+        let property_value = PropertyValue::parse(input)?;
+        input
+            .try_parse(|inp| inp.expect_semicolon())
+            .map_err(|_| input.new_custom_error(MapCssErrorKind::SemicolonExpected))?;
+        Ok(Self {
+            property_name,
+            property_value,
+        })
     }
+}
+
+fn parse_declaration_block_content<'i>(
+    input: &mut Parser<'i, '_>,
+) -> Result<Vec<Declaration>, MapCssParseError<'i>> {
+    let mut declarations = vec![];
+    while !input.is_exhausted() {
+        let declaration = Declaration::parse(input)?;
+        declarations.push(declaration);
+    }
+    Ok(declarations)
 }
 
 impl Parse for Rule {
     fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
-        todo!()
+        let selector = SelectorAlternatives::parse(input)?;
+        input
+            .try_parse(|inp| inp.expect_curly_bracket_block())
+            .map_err(|_| input.new_custom_error(MapCssErrorKind::DeclarationBlockExpected))?;
+        let declarations = input.parse_nested_block(parse_declaration_block_content)?;
+        Ok(Self {
+            selector,
+            declarations,
+        })
     }
 }
 
 impl Parse for Stylesheet {
     fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
-        todo!()
+        let mut rules = vec![];
+        while !input.is_exhausted() {
+            let rule = Rule::parse(input)?;
+            rules.push(rule);
+        }
+        Ok(Self { rules })
     }
 }

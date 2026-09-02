@@ -2,19 +2,19 @@ use crate::types::selector::SelectorAlternatives;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Stylesheet {
-    rules: Vec<Rule>,
+    pub(crate) rules: Vec<Rule>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Rule {
-    selector: SelectorAlternatives,
-    declarations: Vec<Declaration>,
+    pub(crate) selector: SelectorAlternatives,
+    pub(crate) declarations: Vec<Declaration>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Declaration {
-    property_name: String,
-    property_value: PropertyValue,
+    pub(crate) property_name: String,
+    pub(crate) property_value: PropertyValue,
 }
 
 #[derive(Clone, Debug, PartialEq)]
