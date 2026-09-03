@@ -1,5 +1,6 @@
 use cssparser::ParseError;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MapCssErrorKind {
     ObjectTypeExpected,
     TagKeyExpected,
@@ -11,7 +12,6 @@ pub enum MapCssErrorKind {
     TestBlockExpected,
     TagKeyOrExclamationExpected,
     InvalidTokenInsideTest,
-    SelectorChainExpected,
     InvalidHashColor,
     ColorUnitFloatExpected,
     ColorUnitFloatOutOfRange,

@@ -1,5 +1,5 @@
 use cssparser::{
-    ParseErrorKind, Parser, Token,
+    Delimiter, ParseErrorKind, Parser, Token,
     color::{OPAQUE, clamp_unit_f32, parse_hash_color},
 };
 
@@ -185,7 +185,8 @@ fn parse_declaration_block_content<'i>(
 
 impl Parse for Rule {
     fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
-        let selector = SelectorAlternatives::parse(input)?;
+        let selector =
+            input.parse_until_before(Delimiter::CurlyBracketBlock, SelectorAlternatives::parse)?;
         input
             .try_parse(|inp| inp.expect_curly_bracket_block())
             .map_err(|_| input.new_custom_error(MapCssErrorKind::DeclarationBlockExpected))?;

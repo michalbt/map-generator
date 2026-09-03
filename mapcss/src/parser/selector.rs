@@ -1,4 +1,4 @@
-use cssparser::{Parser, ascii_case_insensitive_map};
+use cssparser::{ParseErrorKind, Parser, ascii_case_insensitive_map};
 
 use crate::{
     error::{MapCssErrorKind, MapCssParseError},
@@ -186,10 +186,21 @@ impl Parse for BasicSelector {
     fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
         let object_type = ObjectType::parse(input)?;
         let mut tests = vec![];
-        while let Ok(test) = Test::parse(input) {
-            tests.push(test);
+        loop {
+            match Test::parse(input) {
+                Ok(test) => tests.push(test),
+                Err(e)
+                    if matches!(
+                        e.kind,
+                        ParseErrorKind::Custom(MapCssErrorKind::TestBlockExpected)
+                    ) =>
+                {
+                    // no more tests => stop parsing and return the results
+                    return Ok(BasicSelector::new(object_type, tests));
+                }
+                Err(e) => return Err(e),
+            }
         }
-        Ok(BasicSelector::new(object_type, tests))
     }
 }
 
@@ -198,7 +209,8 @@ impl Parse for SelectorChain {
         let mut chain = vec![];
         let first_selector = BasicSelector::parse(input)?;
         chain.push(first_selector);
-        while let Ok(selector) = BasicSelector::parse(input) {
+        while !input.is_exhausted() {
+            let selector = BasicSelector::parse(input)?;
             chain.push(selector);
         }
         Ok(SelectorChain::new(chain))
@@ -207,16 +219,374 @@ impl Parse for SelectorChain {
 
 impl Parse for SelectorAlternatives {
     fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
-        let mut alternatives = vec![];
-        let first_chain = SelectorChain::parse(input)?;
-        alternatives.push(first_chain);
-        while let Ok(()) = input.expect_comma() {
-            if let Ok(chain) = input.try_parse(SelectorChain::parse) {
-                alternatives.push(chain);
-            } else {
-                return Err(input.new_custom_error(MapCssErrorKind::SelectorChainExpected));
-            }
+        input
+            .parse_comma_separated(SelectorChain::parse)
+            .map(SelectorAlternatives::new)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{assert_matches, fmt::Debug};
+
+    use cssparser::{BasicParseErrorKind, ParseErrorKind, ParserInput, Token};
+
+    use super::*;
+
+    #[derive(Clone, Debug, PartialEq)]
+    enum ParseAllError<'i> {
+        ParseError(MapCssParseError<'i>),
+        RemainingInput(&'i str),
+    }
+
+    fn parse_all<'i, T, F>(parser_function: F, input: &'i str) -> Result<T, ParseAllError<'i>>
+    where
+        F: FnOnce(&mut Parser<'i, '_>) -> Result<T, MapCssParseError<'i>>,
+    {
+        let mut parser_input = ParserInput::new(input);
+        let mut parser = Parser::new(&mut parser_input);
+        let result = parser_function(&mut parser).map_err(ParseAllError::ParseError)?;
+        match parser.try_parse(|p| p.expect_exhausted()) {
+            Ok(_) => Ok(result),
+            Err(_) => Err(ParseAllError::RemainingInput(
+                &input[parser.position().byte_index()..],
+            )),
         }
-        Ok(SelectorAlternatives::new(alternatives))
+    }
+
+    fn parse_all_and_expect<'i, T, F>(parser_function: F, input: &'i str, expected_result: T)
+    where
+        F: FnOnce(&mut Parser<'i, '_>) -> Result<T, MapCssParseError<'i>>,
+        T: Debug + PartialEq,
+    {
+        assert_eq!(parse_all(parser_function, input), Ok(expected_result));
+    }
+
+    fn parse_all_and_expect_error<'i, T, F>(
+        parser_function: F,
+        input: &'i str,
+        expected_error_kind: MapCssErrorKind,
+    ) where
+        F: FnOnce(&mut Parser<'i, '_>) -> Result<T, MapCssParseError<'i>>,
+        T: Debug + PartialEq,
+    {
+        assert_matches!(
+            parse_all(parser_function, input),
+            Err(ParseAllError::ParseError(e))
+                if e.kind == ParseErrorKind::Custom(expected_error_kind),
+        );
+    }
+
+    fn parse_all_and_expect_basic_error<'i, T, F>(
+        parser_function: F,
+        input: &'i str,
+        expected_error_kind: BasicParseErrorKind<'i>,
+    ) where
+        F: FnOnce(&mut Parser<'i, '_>) -> Result<T, MapCssParseError<'i>>,
+        T: Debug + PartialEq,
+    {
+        assert_matches!(
+            parse_all(parser_function, input),
+            Err(ParseAllError::ParseError(e))
+                if e.kind == ParseErrorKind::Basic(expected_error_kind),
+        );
+    }
+
+    fn parse_all_and_expect_remaining<'i, T, F>(
+        parser_function: F,
+        input: &'i str,
+        expected_remaining_input: &'i str,
+    ) where
+        F: FnOnce(&mut Parser<'i, '_>) -> Result<T, MapCssParseError<'i>>,
+        T: Debug + PartialEq,
+    {
+        assert_eq!(
+            parse_all(parser_function, input),
+            Err(ParseAllError::RemainingInput(expected_remaining_input))
+        );
+    }
+
+    #[test]
+    fn object_type_parsing() {
+        parse_all_and_expect(ObjectType::parse, "node", ObjectType::Node);
+        parse_all_and_expect(ObjectType::parse, "Way", ObjectType::Way);
+        parse_all_and_expect(ObjectType::parse, "RELATION", ObjectType::Relation);
+        parse_all_and_expect(ObjectType::parse, "aReA", ObjectType::Area);
+        parse_all_and_expect(ObjectType::parse, "line", ObjectType::Line);
+        parse_all_and_expect(ObjectType::parse, "canvas", ObjectType::Canvas);
+        parse_all_and_expect(ObjectType::parse, "*", ObjectType::Any);
+        parse_all_and_expect_error(
+            ObjectType::parse,
+            "something",
+            MapCssErrorKind::ObjectTypeExpected,
+        );
+        parse_all_and_expect_error(ObjectType::parse, "", MapCssErrorKind::ObjectTypeExpected);
+    }
+
+    #[test]
+    fn tag_key_parsing() {
+        parse_all_and_expect(TagKey::parse, "\"some key\"", TagKey("some key".into()));
+        parse_all_and_expect(TagKey::parse, "\"123 + :#?\"", TagKey("123 + :#?".into()));
+        parse_all_and_expect(TagKey::parse, "some_value", TagKey("some_value".into()));
+        parse_all_and_expect_remaining(TagKey::parse, "key=value", "=value");
+        parse_all_and_expect_error(TagKey::parse, "123", MapCssErrorKind::TagKeyExpected);
+    }
+
+    #[test]
+    fn tag_value_parsing() {
+        parse_all_and_expect(
+            TagValue::parse,
+            "\"some value\"",
+            TagValue::String(TagStringValue("some value".into())),
+        );
+        parse_all_and_expect(
+            TagValue::parse,
+            "some_value",
+            TagValue::String(TagStringValue("some_value".into())),
+        );
+        parse_all_and_expect_remaining(TagValue::parse, "some value", " value");
+        parse_all_and_expect(
+            TagValue::parse,
+            "12.3",
+            TagValue::Numeric(TagNumericValue::Float(12.3)),
+        );
+        parse_all_and_expect(
+            TagValue::parse,
+            "8765",
+            TagValue::Numeric(TagNumericValue::Integer(8765)),
+        );
+        parse_all_and_expect_error(TagValue::parse, "123a", MapCssErrorKind::TagValueExpected);
+    }
+
+    #[test]
+    fn regex_parsing() {
+        parse_all_and_expect(
+            Regex::parse,
+            "\"\\\\d{4}-\\\\d{2}-\\\\d{2}\"", // Double escaping: one for Rust, one for MapCSS
+            Regex(regex::Regex::new("^\\d{4}-\\d{2}-\\d{2}$").unwrap()),
+        );
+        parse_all_and_expect_error(Regex::parse, "/abc/", MapCssErrorKind::RegexExpected);
+        parse_all_and_expect_error(Regex::parse, "abc", MapCssErrorKind::RegexExpected);
+        parse_all_and_expect_error(Regex::parse, "\"(\"", MapCssErrorKind::InvalidRegex);
+    }
+
+    #[test]
+    fn test_parsing() {
+        parse_all_and_expect(
+            Test::parse,
+            "[key=value]",
+            Test::Equal(
+                TagKey("key".into()),
+                TagValue::String(TagStringValue("value".into())),
+            ),
+        );
+        parse_all_and_expect(
+            Test::parse,
+            "[\"key\"!=\"value\"]",
+            Test::NotEqual(
+                TagKey("key".into()),
+                TagValue::String(TagStringValue("value".into())),
+            ),
+        );
+        parse_all_and_expect(
+            Test::parse,
+            "[ \"key\" < 3 ]",
+            Test::LessThan(TagKey("key".into()), TagNumericValue::Integer(3)),
+        );
+        parse_all_and_expect(
+            Test::parse,
+            "[\"#key 123?\"<=2.7]",
+            Test::LessThanOrEqual(TagKey("#key 123?".into()), TagNumericValue::Float(2.7)),
+        );
+        parse_all_and_expect(
+            Test::parse,
+            "[_key > -15]",
+            Test::GreaterThan(TagKey("_key".into()), TagNumericValue::Integer(-15)),
+        );
+        parse_all_and_expect(
+            Test::parse,
+            "[KEY2 >= 4e-9]",
+            Test::GreaterThanOrEqual(TagKey("KEY2".into()), TagNumericValue::Float(4e-9)),
+        );
+        parse_all_and_expect(
+            Test::parse,
+            "[key =~ \"a+bc*\"]",
+            Test::Matches(
+                TagKey("key".into()),
+                Regex(regex::Regex::new("^a+bc*$").unwrap()),
+            ),
+        );
+        parse_all_and_expect(Test::parse, "[key]", Test::Set(TagKey("key".into())));
+        parse_all_and_expect(Test::parse, "[\"key\"]", Test::Set(TagKey("key".into())));
+        parse_all_and_expect(Test::parse, "[!key]", Test::NotSet(TagKey("key".into())));
+        parse_all_and_expect_error(Test::parse, "something", MapCssErrorKind::TestBlockExpected);
+        parse_all_and_expect_error(
+            Test::parse,
+            "[]",
+            MapCssErrorKind::TagKeyOrExclamationExpected,
+        );
+        parse_all_and_expect_error(
+            Test::parse,
+            "[key > value]",
+            MapCssErrorKind::TagNumericValueExpected,
+        );
+        parse_all_and_expect_error(Test::parse, "[key=]", MapCssErrorKind::TagValueExpected);
+        parse_all_and_expect_basic_error(
+            Test::parse,
+            "[!key=value]",
+            BasicParseErrorKind::UnexpectedToken(Token::Delim('=')),
+        );
+        parse_all_and_expect_error(Test::parse, "[!=7]", MapCssErrorKind::TagKeyExpected);
+        parse_all_and_expect_error(Test::parse, "[a==3]", MapCssErrorKind::TagValueExpected);
+        parse_all_and_expect_error(
+            Test::parse,
+            "[a~=3]",
+            MapCssErrorKind::InvalidTokenInsideTest,
+        );
+    }
+
+    #[test]
+    fn basic_selector_parsing() {
+        parse_all_and_expect(
+            BasicSelector::parse,
+            "node",
+            BasicSelector::new(ObjectType::Node, vec![]),
+        );
+        parse_all_and_expect(
+            BasicSelector::parse,
+            "node [key=value]",
+            BasicSelector::new(
+                ObjectType::Node,
+                vec![Test::Equal(
+                    TagKey("key".into()),
+                    TagValue::String(TagStringValue("value".into())),
+                )],
+            ),
+        );
+        parse_all_and_expect(
+            BasicSelector::parse,
+            "*[key=value]",
+            BasicSelector::new(
+                ObjectType::Any,
+                vec![Test::Equal(
+                    TagKey("key".into()),
+                    TagValue::String(TagStringValue("value".into())),
+                )],
+            ),
+        );
+        parse_all_and_expect(
+            BasicSelector::parse,
+            "node[k1][k2][k3]",
+            BasicSelector::new(
+                ObjectType::Node,
+                vec![
+                    Test::Set(TagKey("k1".into())),
+                    Test::Set(TagKey("k2".into())),
+                    Test::Set(TagKey("k3".into())),
+                ],
+            ),
+        );
+        parse_all_and_expect_error(
+            BasicSelector::parse,
+            "[k1]",
+            MapCssErrorKind::ObjectTypeExpected,
+        );
+        parse_all_and_expect_error(
+            BasicSelector::parse,
+            "node[something < invalid]",
+            MapCssErrorKind::TagNumericValueExpected,
+        );
+        parse_all_and_expect_remaining(BasicSelector::parse, "way node", " node");
+        parse_all_and_expect_remaining(
+            BasicSelector::parse,
+            "relation [tag] way [tag]",
+            " way [tag]",
+        );
+        parse_all_and_expect_remaining(BasicSelector::parse, "area[k=v] {}", " {}");
+    }
+
+    #[test]
+    fn selector_chain_parsing() {
+        parse_all_and_expect(
+            SelectorChain::parse,
+            "node",
+            SelectorChain::new(vec![BasicSelector::new(ObjectType::Node, vec![])]),
+        );
+        parse_all_and_expect(
+            SelectorChain::parse,
+            "way node [tag]",
+            SelectorChain::new(vec![
+                BasicSelector::new(ObjectType::Way, vec![]),
+                BasicSelector::new(ObjectType::Node, vec![Test::Set(TagKey("tag".into()))]),
+            ]),
+        );
+        parse_all_and_expect(
+            SelectorChain::parse,
+            "relation[k1]way[k2][k3]node[k4]",
+            SelectorChain::new(vec![
+                BasicSelector::new(ObjectType::Relation, vec![Test::Set(TagKey("k1".into()))]),
+                BasicSelector::new(
+                    ObjectType::Way,
+                    vec![
+                        Test::Set(TagKey("k2".into())),
+                        Test::Set(TagKey("k3".into())),
+                    ],
+                ),
+                BasicSelector::new(ObjectType::Node, vec![Test::Set(TagKey("k4".into()))]),
+            ]),
+        );
+        parse_all_and_expect(
+            SelectorChain::parse,
+            "*[k1]*",
+            SelectorChain::new(vec![
+                BasicSelector::new(ObjectType::Any, vec![Test::Set(TagKey("k1".into()))]),
+                BasicSelector::new(ObjectType::Any, vec![]),
+            ]),
+        );
+        parse_all_and_expect_error(
+            SelectorChain::parse,
+            "node something",
+            MapCssErrorKind::ObjectTypeExpected,
+        );
+    }
+
+    #[test]
+    fn selector_alternatives_parsing() {
+        parse_all_and_expect(
+            SelectorAlternatives::parse,
+            "node",
+            SelectorAlternatives::new(vec![SelectorChain::new(vec![BasicSelector::new(
+                ObjectType::Node,
+                vec![],
+            )])]),
+        );
+        parse_all_and_expect(
+            SelectorAlternatives::parse,
+            "node, way",
+            SelectorAlternatives::new(vec![
+                SelectorChain::new(vec![BasicSelector::new(ObjectType::Node, vec![])]),
+                SelectorChain::new(vec![BasicSelector::new(ObjectType::Way, vec![])]),
+            ]),
+        );
+        parse_all_and_expect(
+            SelectorAlternatives::parse,
+            "way[k1] node, way[k2], node",
+            SelectorAlternatives::new(vec![
+                SelectorChain::new(vec![
+                    BasicSelector::new(ObjectType::Way, vec![Test::Set(TagKey("k1".into()))]),
+                    BasicSelector::new(ObjectType::Node, vec![]),
+                ]),
+                SelectorChain::new(vec![BasicSelector::new(
+                    ObjectType::Way,
+                    vec![Test::Set(TagKey("k2".into()))],
+                )]),
+                SelectorChain::new(vec![BasicSelector::new(ObjectType::Node, vec![])]),
+            ]),
+        );
+        parse_all_and_expect_error(
+            SelectorAlternatives::parse,
+            "something",
+            MapCssErrorKind::ObjectTypeExpected,
+        );
     }
 }
