@@ -22,7 +22,7 @@ fn parse_non_special_object_type(input: &mut Parser) -> Result<ObjectType, ()> {
                 "canvas" => ObjectType::Canvas,
             }
         }
-        if let Some(object_type) = ObjectTypeMap::get(&**identifier) {
+        if let Some(object_type) = ObjectTypeMap::get(identifier) {
             Ok(*object_type)
         } else {
             Err(())

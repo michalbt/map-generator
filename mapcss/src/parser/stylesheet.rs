@@ -23,7 +23,7 @@ fn parse_color_unit_float<'i>(input: &mut Parser<'i, '_>) -> Result<u8, MapCssPa
     let value = input
         .try_parse(|inp| inp.expect_number())
         .map_err(|_| input.new_custom_error(MapCssErrorKind::ColorUnitFloatExpected))?;
-    if value < 0.0 || value > 1.0 {
+    if !(0.0..=1.0).contains(&value) {
         Err(input.new_custom_error(MapCssErrorKind::ColorUnitFloatOutOfRange))
     } else {
         Ok(clamp_unit_f32(value))
@@ -34,7 +34,7 @@ fn parse_alpha<'i>(input: &mut Parser<'i, '_>) -> Result<f32, MapCssParseError<'
     let value = input
         .try_parse(|inp| inp.expect_number())
         .map_err(|_| input.new_custom_error(MapCssErrorKind::ColorAlphaUnitFloatExpected))?;
-    if value < 0.0 || value > 1.0 {
+    if !(0.0..=1.0).contains(&value) {
         Err(input.new_custom_error(MapCssErrorKind::ColorAlphaUnitFloatOutOfRange))
     } else {
         Ok(value)

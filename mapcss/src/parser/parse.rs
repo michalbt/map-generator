@@ -12,16 +12,14 @@ pub(crate) trait Parse {
         Self: Sized;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct ParseContext {
     pub tag_mapping: TagMapping,
 }
 
 impl ParseContext {
     pub fn new() -> Self {
-        Self {
-            tag_mapping: TagMapping::new(),
-        }
+        Default::default()
     }
 
     pub fn parse<'i, T>(

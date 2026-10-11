@@ -75,3 +75,9 @@ impl TagMapping {
         &self.forward[key]
     }
 }
+
+impl Default for TagMapping {
+    fn default() -> Self {
+        Self::new()
+    }
+}
