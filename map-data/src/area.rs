@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use slotmap::new_key_type;
 
 use crate::{
-    object::{OsmId, Tags, impl_object},
+    object::{OsmId, impl_object},
     relation::RelationKey,
+    tags::Tags,
     way::WayKey,
 };
 

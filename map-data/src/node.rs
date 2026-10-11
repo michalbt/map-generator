@@ -4,8 +4,9 @@ use slotmap::new_key_type;
 
 use crate::{
     location::Location,
-    object::{OsmId, Tags, impl_object},
+    object::{OsmId, impl_object},
     relation::RelationKey,
+    tags::Tags,
     way::WayKey,
 };
 

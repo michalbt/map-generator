@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use map_data::{AreaSource, ObjectKey, Storage};
+use map_data::{AreaSource, ObjectKey, Storage, TagKey};
 
 pub(crate) trait Selector {
     fn matches(&self, key: ObjectKey, storage: &Storage) -> bool;
@@ -158,39 +158,36 @@ impl Selector for Test {
     fn matches(&self, key: ObjectKey, storage: &Storage) -> bool {
         let object_tags = storage[key].tags();
         match self {
-            Self::Set(TagKey(tag_key)) => object_tags.contains_key(tag_key),
-            Self::NotSet(TagKey(tag_key)) => !object_tags.contains_key(tag_key),
-            Self::Equal(TagKey(tag_key), tag_value) => object_tags
+            Self::Set(tag_key) => object_tags.contains_key(tag_key),
+            Self::NotSet(tag_key) => !object_tags.contains_key(tag_key),
+            Self::Equal(tag_key, tag_value) => object_tags
                 .get(tag_key)
                 .is_some_and(|val| *tag_value == **val),
-            Self::NotEqual(TagKey(tag_key), tag_value) => object_tags
+            Self::NotEqual(tag_key, tag_value) => object_tags
                 .get(tag_key)
                 .is_some_and(|val| *tag_value != **val),
-            Self::LessThan(TagKey(tag_key), tag_value) => object_tags
+            Self::LessThan(tag_key, tag_value) => object_tags
                 .get(tag_key)
                 .and_then(|s| s.parse::<TagNumericValue>().ok())
                 .is_some_and(|val| val < *tag_value),
-            Self::LessThanOrEqual(TagKey(tag_key), tag_value) => object_tags
+            Self::LessThanOrEqual(tag_key, tag_value) => object_tags
                 .get(tag_key)
                 .and_then(|s| s.parse::<TagNumericValue>().ok())
                 .is_some_and(|val| val <= *tag_value),
-            Self::GreaterThan(TagKey(tag_key), tag_value) => object_tags
+            Self::GreaterThan(tag_key, tag_value) => object_tags
                 .get(tag_key)
                 .and_then(|s| s.parse::<TagNumericValue>().ok())
                 .is_some_and(|val| val > *tag_value),
-            Self::GreaterThanOrEqual(TagKey(tag_key), tag_value) => object_tags
+            Self::GreaterThanOrEqual(tag_key, tag_value) => object_tags
                 .get(tag_key)
                 .and_then(|s| s.parse::<TagNumericValue>().ok())
                 .is_some_and(|val| val >= *tag_value),
-            Self::Matches(TagKey(tag_key), Regex(regex)) => object_tags
+            Self::Matches(tag_key, Regex(regex)) => object_tags
                 .get(tag_key)
                 .is_some_and(|val| regex.is_match(val)),
         }
     }
 }
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct TagKey(pub String);
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum TagValue {

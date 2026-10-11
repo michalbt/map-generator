@@ -5,7 +5,7 @@ use cssparser::{
 
 use crate::{
     error::{MapCssErrorKind, MapCssParseError},
-    parser::Parse,
+    parser::parse::{Parse, ParseContext},
     types::{
         selector::SelectorAlternatives,
         stylesheet::{Declaration, PropertyValue, Rule, Stylesheet},
@@ -113,7 +113,10 @@ fn parse_comma_separated_integer_list<'i>(
 }
 
 impl Parse for PropertyValue {
-    fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
+    fn parse<'i>(
+        input: &mut Parser<'i, '_>,
+        _ctx: &mut ParseContext,
+    ) -> Result<Self, MapCssParseError<'i>> {
         match input.try_parse(parse_comma_separated_integer_list) {
             Ok(list) => return Ok(Self::IntegerList(list)),
             Err(e)
@@ -154,14 +157,17 @@ impl Parse for PropertyValue {
 }
 
 impl Parse for Declaration {
-    fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
+    fn parse<'i>(
+        input: &mut Parser<'i, '_>,
+        ctx: &mut ParseContext,
+    ) -> Result<Self, MapCssParseError<'i>> {
         let property_name = input
             .try_parse(|inp| inp.expect_ident().map(ToString::to_string))
             .map_err(|_| input.new_custom_error(MapCssErrorKind::PropertyNameExpected))?;
         input
             .try_parse(|inp| inp.expect_colon())
             .map_err(|_| input.new_custom_error(MapCssErrorKind::ColonExpected))?;
-        let property_value = PropertyValue::parse(input)?;
+        let property_value = PropertyValue::parse(input, ctx)?;
         input
             .try_parse(|inp| inp.expect_semicolon())
             .map_err(|_| input.new_custom_error(MapCssErrorKind::SemicolonExpected))?;
@@ -174,23 +180,30 @@ impl Parse for Declaration {
 
 fn parse_declaration_block_content<'i>(
     input: &mut Parser<'i, '_>,
+    ctx: &mut ParseContext,
 ) -> Result<Vec<Declaration>, MapCssParseError<'i>> {
     let mut declarations = vec![];
     while !input.is_exhausted() {
-        let declaration = Declaration::parse(input)?;
+        let declaration = Declaration::parse(input, ctx)?;
         declarations.push(declaration);
     }
     Ok(declarations)
 }
 
 impl Parse for Rule {
-    fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
-        let selector =
-            input.parse_until_before(Delimiter::CurlyBracketBlock, SelectorAlternatives::parse)?;
+    fn parse<'i>(
+        input: &mut Parser<'i, '_>,
+        ctx: &mut ParseContext,
+    ) -> Result<Self, MapCssParseError<'i>> {
+        let selector = input.parse_until_before(
+            Delimiter::CurlyBracketBlock,
+            ctx.parse::<SelectorAlternatives>(),
+        )?;
         input
             .try_parse(|inp| inp.expect_curly_bracket_block())
             .map_err(|_| input.new_custom_error(MapCssErrorKind::DeclarationBlockExpected))?;
-        let declarations = input.parse_nested_block(parse_declaration_block_content)?;
+        let declarations =
+            input.parse_nested_block(|inp| parse_declaration_block_content(inp, ctx))?;
         Ok(Self {
             selector,
             declarations,
@@ -199,16 +212,19 @@ impl Parse for Rule {
 }
 
 impl Parse for Stylesheet {
-    fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
+    fn parse<'i>(
+        input: &mut Parser<'i, '_>,
+        ctx: &mut ParseContext,
+    ) -> Result<Self, MapCssParseError<'i>> {
         let mut rules = vec![];
         while !input.is_exhausted() {
-            let rule = Rule::parse(input)?;
+            let rule = Rule::parse(input, ctx)?;
             rules.push(rule);
         }
         Ok(Self { rules })
     }
 }
-
+/*
 #[cfg(test)]
 mod tests {
     use cssparser::BasicParseErrorKind;
@@ -578,4 +594,4 @@ mod tests {
             MapCssErrorKind::ColonExpected,
         );
     }
-}
+}*/

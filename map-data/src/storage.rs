@@ -9,6 +9,7 @@ use crate::{
     object::{Object, ObjectKey},
     relation::{Relation, RelationKey, RelationMember},
     span::Span,
+    tags::TagMapping,
     way::{Way, WayKey},
 };
 
@@ -19,16 +20,18 @@ pub struct Storage {
     areas: SlotMap<AreaKey, Area>,
     relations: SlotMap<RelationKey, Relation>,
     map_span: Span,
+    tag_mapping: TagMapping,
 }
 
 impl Storage {
-    pub fn new(map_span: Span) -> Storage {
+    pub fn new(map_span: Span, tag_mapping: TagMapping) -> Storage {
         Storage {
             nodes: SlotMap::with_key(),
             ways: SlotMap::with_key(),
             areas: SlotMap::with_key(),
             relations: SlotMap::with_key(),
             map_span,
+            tag_mapping,
         }
     }
 
@@ -324,7 +327,10 @@ mod tests {
     use super::*;
 
     fn create_storage() -> Storage {
-        Storage::new(Span::new((49.9460, 14.1918), (50.1787, 14.7209)).unwrap())
+        Storage::new(
+            Span::new((49.9460, 14.1918), (50.1787, 14.7209)).unwrap(),
+            TagMapping::new(),
+        )
     }
 
     fn assert_same_elements<T: PartialEq + Debug>(left: &[T], right: &[T]) {

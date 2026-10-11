@@ -5,8 +5,9 @@ use slotmap::new_key_type;
 use crate::{
     area::AreaKey,
     node::NodeKey,
-    object::{OsmId, Tags, impl_object},
+    object::{OsmId, impl_object},
     relation::RelationKey,
+    tags::Tags,
 };
 
 new_key_type! { pub struct WayKey; }

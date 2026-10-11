@@ -1,12 +1,14 @@
-use std::{collections::HashMap, fmt::Debug};
-
 use derive_more::From;
 
-use crate::{area::AreaKey, node::NodeKey, relation::RelationKey, way::WayKey};
+use crate::{
+    area::AreaKey,
+    node::NodeKey,
+    relation::RelationKey,
+    tags::{TagKey, Tags},
+    way::WayKey,
+};
 
 pub type OsmId = Option<i64>;
-
-pub type Tags = HashMap<String, String>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, From)]
 pub enum ObjectKey {
@@ -26,20 +28,20 @@ pub trait Object: TrackContainingRelations {
 
     fn containing_relations(&self) -> &[RelationKey];
 
-    fn has_tag(&self, tag: &str) -> bool {
-        self.tags().contains_key(tag)
+    fn has_tag(&self, tag: TagKey) -> bool {
+        self.tags().contains_key(&tag)
     }
 
-    fn get_tag(&self, tag: &str) -> Option<&str> {
-        self.tags().get(tag).map(|s| s.as_str())
+    fn get_tag(&self, tag: TagKey) -> Option<&str> {
+        self.tags().get(&tag).map(|s| s.as_str())
     }
 
-    fn set_tag(&mut self, tag: String, value: String) {
+    fn set_tag(&mut self, tag: TagKey, value: String) {
         self.tags_mut().insert(tag, value);
     }
 
-    fn remove_tag(&mut self, tag: &str) {
-        self.tags_mut().remove(tag);
+    fn remove_tag(&mut self, tag: TagKey) {
+        self.tags_mut().remove(&tag);
     }
 }
 
@@ -57,11 +59,11 @@ macro_rules! impl_object {
                 self.osm_id
             }
 
-            fn tags(&self) -> &$crate::object::Tags {
+            fn tags(&self) -> &$crate::tags::Tags {
                 &self.tags
             }
 
-            fn tags_mut(&mut self) -> &mut $crate::object::Tags {
+            fn tags_mut(&mut self) -> &mut $crate::tags::Tags {
                 &mut self.tags
             }
 

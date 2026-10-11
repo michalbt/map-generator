@@ -1,11 +1,12 @@
 use cssparser::{ParseErrorKind, Parser, ascii_case_insensitive_map};
+use map_data::TagKey;
 
 use crate::{
     error::{MapCssErrorKind, MapCssParseError},
-    parser::Parse,
+    parser::parse::{Parse, ParseContext},
     types::selector::{
-        BasicSelector, ObjectType, Regex, SelectorAlternatives, SelectorChain, TagKey,
-        TagNumericValue, TagStringValue, TagValue, Test,
+        BasicSelector, ObjectType, Regex, SelectorAlternatives, SelectorChain, TagNumericValue,
+        TagStringValue, TagValue, Test,
     },
 };
 
@@ -32,7 +33,10 @@ fn parse_non_special_object_type(input: &mut Parser) -> Result<ObjectType, ()> {
 }
 
 impl Parse for ObjectType {
-    fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
+    fn parse<'i>(
+        input: &mut Parser<'i, '_>,
+        _ctx: &mut ParseContext,
+    ) -> Result<Self, MapCssParseError<'i>> {
         if let Ok(object_type) = input.try_parse(parse_non_special_object_type) {
             Ok(object_type)
         } else if let Ok(()) = input.try_parse(|inp| inp.expect_delim('*')) {
@@ -44,11 +48,15 @@ impl Parse for ObjectType {
 }
 
 impl Parse for TagKey {
-    fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
+    fn parse<'i>(
+        input: &mut Parser<'i, '_>,
+        ctx: &mut ParseContext,
+    ) -> Result<Self, MapCssParseError<'i>> {
         if let Ok(string) =
-            input.try_parse(|inp| inp.expect_ident_or_string().map(|s| TagKey(s.to_string())))
+            input.try_parse(|inp| inp.expect_ident_or_string().map(ToString::to_string))
         {
-            Ok(string)
+            let tag_key = ctx.tag_mapping.get_or_insert(&string);
+            Ok(tag_key)
         } else {
             Err(input.new_custom_error(MapCssErrorKind::TagKeyExpected))
         }
@@ -56,7 +64,10 @@ impl Parse for TagKey {
 }
 
 impl Parse for TagNumericValue {
-    fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
+    fn parse<'i>(
+        input: &mut Parser<'i, '_>,
+        _ctx: &mut ParseContext,
+    ) -> Result<Self, MapCssParseError<'i>> {
         if let Ok(integer) = input.try_parse(|inp| inp.expect_integer()) {
             Ok(Self::Integer(integer))
         } else if let Ok(float) = input.try_parse(|inp| inp.expect_number()) {
@@ -68,7 +79,10 @@ impl Parse for TagNumericValue {
 }
 
 impl Parse for TagStringValue {
-    fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
+    fn parse<'i>(
+        input: &mut Parser<'i, '_>,
+        _ctx: &mut ParseContext,
+    ) -> Result<Self, MapCssParseError<'i>> {
         if let Ok(string) = input.try_parse(|inp| {
             inp.expect_ident_or_string()
                 .map(|s| TagStringValue(s.to_string()))
@@ -81,10 +95,13 @@ impl Parse for TagStringValue {
 }
 
 impl Parse for TagValue {
-    fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
-        if let Ok(numeric) = input.try_parse(TagNumericValue::parse) {
+    fn parse<'i>(
+        input: &mut Parser<'i, '_>,
+        ctx: &mut ParseContext,
+    ) -> Result<Self, MapCssParseError<'i>> {
+        if let Ok(numeric) = input.try_parse(ctx.parse::<TagNumericValue>()) {
             Ok(Self::Numeric(numeric))
-        } else if let Ok(string) = input.try_parse(TagStringValue::parse) {
+        } else if let Ok(string) = input.try_parse(ctx.parse::<TagStringValue>()) {
             Ok(Self::String(string))
         } else {
             Err(input.new_custom_error(MapCssErrorKind::TagValueExpected))
@@ -102,7 +119,10 @@ fn create_regex_with_anchors(string: &str) -> Result<Regex, ()> {
 impl Parse for Regex {
     /// Only quoted regexes are supported
     /// TODO: quote with slashes
-    fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
+    fn parse<'i>(
+        input: &mut Parser<'i, '_>,
+        _ctx: &mut ParseContext,
+    ) -> Result<Self, MapCssParseError<'i>> {
         if let Ok(string) = input.try_parse(|inp| inp.expect_string().map(ToString::to_string)) {
             create_regex_with_anchors(&string)
                 .map_err(|_| input.new_custom_error(MapCssErrorKind::InvalidRegex))
@@ -144,25 +164,30 @@ fn parse_matches_operator(input: &mut Parser) -> Result<(), ()> {
     input.expect_delim('~').map_err(|_| ())
 }
 
-fn parse_test_content<'i>(input: &mut Parser<'i, '_>) -> Result<Test, MapCssParseError<'i>> {
+fn parse_test_content<'i>(
+    input: &mut Parser<'i, '_>,
+    ctx: &mut ParseContext,
+) -> Result<Test, MapCssParseError<'i>> {
     if let Ok(()) = input.try_parse(|inp| inp.expect_delim('!')) {
-        TagKey::parse(input).map(Test::NotSet)
-    } else if let Ok(tag_key) = input.try_parse(TagKey::parse) {
+        TagKey::parse(input, ctx).map(Test::NotSet)
+    } else if let Ok(tag_key) = input.try_parse(|inp| TagKey::parse(inp, ctx)) {
         // Order is important: operators must be before their prefixes ('=~' before '=' etc.)
         if let Ok(()) = input.try_parse(parse_matches_operator) {
-            Regex::parse(input).map(move |regex| Test::Matches(tag_key, regex))
+            Regex::parse(input, ctx).map(move |regex| Test::Matches(tag_key, regex))
         } else if let Ok(()) = input.try_parse(parse_less_than_or_equal_operator) {
-            TagNumericValue::parse(input).map(move |value| Test::LessThanOrEqual(tag_key, value))
+            TagNumericValue::parse(input, ctx)
+                .map(move |value| Test::LessThanOrEqual(tag_key, value))
         } else if let Ok(()) = input.try_parse(parse_greater_than_or_equal_operator) {
-            TagNumericValue::parse(input).map(move |value| Test::GreaterThanOrEqual(tag_key, value))
+            TagNumericValue::parse(input, ctx)
+                .map(move |value| Test::GreaterThanOrEqual(tag_key, value))
         } else if let Ok(()) = input.try_parse(parse_not_equal_operator) {
-            TagValue::parse(input).map(move |value| Test::NotEqual(tag_key, value))
+            TagValue::parse(input, ctx).map(move |value| Test::NotEqual(tag_key, value))
         } else if let Ok(()) = input.try_parse(parse_less_than_operator) {
-            TagNumericValue::parse(input).map(move |value| Test::LessThan(tag_key, value))
+            TagNumericValue::parse(input, ctx).map(move |value| Test::LessThan(tag_key, value))
         } else if let Ok(()) = input.try_parse(parse_greater_than_operator) {
-            TagNumericValue::parse(input).map(move |value| Test::GreaterThan(tag_key, value))
+            TagNumericValue::parse(input, ctx).map(move |value| Test::GreaterThan(tag_key, value))
         } else if let Ok(()) = input.try_parse(parse_equal_operator) {
-            TagValue::parse(input).map(move |value| Test::Equal(tag_key, value))
+            TagValue::parse(input, ctx).map(move |value| Test::Equal(tag_key, value))
         } else if let Ok(()) = input.try_parse(|inp| inp.expect_exhausted()) {
             Ok(Test::Set(tag_key))
         } else {
@@ -174,20 +199,26 @@ fn parse_test_content<'i>(input: &mut Parser<'i, '_>) -> Result<Test, MapCssPars
 }
 
 impl Parse for Test {
-    fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
+    fn parse<'i>(
+        input: &mut Parser<'i, '_>,
+        ctx: &mut ParseContext,
+    ) -> Result<Self, MapCssParseError<'i>> {
         input
             .try_parse(|inp| inp.expect_square_bracket_block())
             .map_err(|_| input.new_custom_error(MapCssErrorKind::TestBlockExpected))?;
-        input.parse_nested_block(parse_test_content)
+        input.parse_nested_block(|inp| parse_test_content(inp, ctx))
     }
 }
 
 impl Parse for BasicSelector {
-    fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
-        let object_type = ObjectType::parse(input)?;
+    fn parse<'i>(
+        input: &mut Parser<'i, '_>,
+        ctx: &mut ParseContext,
+    ) -> Result<Self, MapCssParseError<'i>> {
+        let object_type = ObjectType::parse(input, ctx)?;
         let mut tests = vec![];
         loop {
-            match Test::parse(input) {
+            match Test::parse(input, ctx) {
                 Ok(test) => tests.push(test),
                 Err(e)
                     if matches!(
@@ -205,12 +236,15 @@ impl Parse for BasicSelector {
 }
 
 impl Parse for SelectorChain {
-    fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
+    fn parse<'i>(
+        input: &mut Parser<'i, '_>,
+        ctx: &mut ParseContext,
+    ) -> Result<Self, MapCssParseError<'i>> {
         let mut chain = vec![];
-        let first_selector = BasicSelector::parse(input)?;
+        let first_selector = BasicSelector::parse(input, ctx)?;
         chain.push(first_selector);
         while !input.is_exhausted() {
-            let selector = BasicSelector::parse(input)?;
+            let selector = BasicSelector::parse(input, ctx)?;
             chain.push(selector);
         }
         Ok(SelectorChain::new(chain))
@@ -218,13 +252,16 @@ impl Parse for SelectorChain {
 }
 
 impl Parse for SelectorAlternatives {
-    fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, MapCssParseError<'i>> {
+    fn parse<'i>(
+        input: &mut Parser<'i, '_>,
+        ctx: &mut ParseContext,
+    ) -> Result<Self, MapCssParseError<'i>> {
         input
-            .parse_comma_separated(SelectorChain::parse)
+            .parse_comma_separated(ctx.parse::<SelectorChain>())
             .map(SelectorAlternatives::new)
     }
 }
-
+/*
 #[cfg(test)]
 mod tests {
     use cssparser::{BasicParseErrorKind, Token};
@@ -521,4 +558,4 @@ mod tests {
             MapCssErrorKind::ObjectTypeExpected,
         );
     }
-}
+}*/

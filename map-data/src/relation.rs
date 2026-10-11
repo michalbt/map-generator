@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use slotmap::new_key_type;
 
-use crate::object::{ObjectKey, OsmId, Tags, impl_object};
+use crate::{
+    object::{ObjectKey, OsmId, impl_object},
+    tags::Tags,
+};
 
 new_key_type! { pub struct RelationKey; }
 
