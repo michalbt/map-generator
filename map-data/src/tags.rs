@@ -1,58 +1,44 @@
 use std::collections::HashMap;
 
-use slotmap::{SlotMap, new_key_type};
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct TagKey(usize);
 
 pub type Tags = HashMap<TagKey, String>;
 
-new_key_type! { pub struct TagKey; }
-
 #[derive(Debug)]
 pub struct TagMapping {
-    forward: SlotMap<TagKey, String>,
+    forward: Vec<String>,
     reverse: HashMap<String, TagKey>,
-    well_known_tag_storage: WellKnownTagStorage,
 }
 
 macro_rules! use_well_known_tags {
-    ($(($tag_str:literal, $tag_ident:ident, $tag_enum_variant:ident)),* $(,)?) => {
-        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-        pub enum WellKnownTag {
-            $($tag_enum_variant,)*
-        }
-
-        #[derive(Debug)]
-        struct WellKnownTagStorage {
-            $($tag_ident: TagKey,)*
-        }
-
+    ($(($order:literal, $tag_key_str:literal, $const_ident:ident)),* $(,)?) => {
         impl TagMapping {
+            $(
+                pub const $const_ident: usize = $order;
+            )*
+
             pub fn new() -> Self {
-                let mut forward = SlotMap::with_key();
+                let mut forward = Vec::new();
                 let mut reverse = HashMap::new();
                 $({
-                    let key = forward.insert($tag_str.to_string());
-                    reverse.insert($tag_str.to_string(), key);
+                    forward.push($tag_key_str.to_string());
+                    assert_eq!($order, forward.len());
+                    reverse.insert($tag_key_str.to_string(), TagKey($order));
                 })*
-                let well_known_tag_storage = WellKnownTagStorage {
-                    $($tag_ident: reverse[$tag_str],)*
-                };
-                Self { forward, reverse, well_known_tag_storage }
-            }
-
-            pub fn get_well_known_tag_key(&self, tag: WellKnownTag) -> TagKey {
-                match tag {
-                    $(WellKnownTag::$tag_enum_variant => self.well_known_tag_storage.$tag_ident,)*
-                }
+                Self { forward, reverse }
             }
         }
     };
 }
 
+// Remove the $order argument and use {index()} after RFC 3086 is stabilized
+// https://github.com/rust-lang/rust/issues/83527
 use_well_known_tags!(
-    ("type", type_, Type),
-    ("area", area, Area),
-    ("highway", highway, Highway),
-    ("barrier", barrier, Barrier),
+    (0, "type", TYPE_KEY),
+    (1, "area", AREA_KEY),
+    (2, "highway", HIGHWAY_KEY),
+    (3, "barrier", BARRIER_KEY),
 );
 
 impl TagMapping {
@@ -60,7 +46,8 @@ impl TagMapping {
         match self.reverse.get(tag) {
             Some(&tag_key) => tag_key,
             None => {
-                let tag_key = self.forward.insert(tag.to_string());
+                self.forward.push(tag.to_string());
+                let tag_key = TagKey(self.forward.len());
                 self.reverse.insert(tag.to_string(), tag_key);
                 tag_key
             }
@@ -72,7 +59,7 @@ impl TagMapping {
     }
 
     pub fn get_string(&self, key: TagKey) -> &str {
-        &self.forward[key]
+        &self.forward[key.0]
     }
 }
 
