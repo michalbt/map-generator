@@ -45,8 +45,9 @@ impl GeodeticLocation {
     }
 }
 
-/// Location on a map. The X axis runs from west to east and the Y axis runs from south to north. Location of the origin
-/// relative to the map is not specified. One unit should approximately correspond to 1 meter.
+/// Location on a map. The X axis runs from left to right and the Y axis runs from bottom to top.
+/// Location of the origin relative to the map is not specified. The scale of the units is also not specified,
+/// however, it should be the same on both axes.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Location {
     pub x: f64,
