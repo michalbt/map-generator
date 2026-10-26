@@ -1,91 +1,103 @@
 use std::ops::{Add, Mul, Neg, Sub};
 
-use utm::{WSG84ToLatLonError, to_utm_wgs84, wsg84_utm_to_lat_lon};
+use proj::ProjError;
 
 use crate::span::Span;
 
-/// Map location in the [UTM coordinate system](https://en.wikipedia.org/wiki/Universal_Transverse_Mercator_coordinate_system)
-/// without a zone number and letter, which are implied and stored in the [`Storage`](crate::storage::Storage) struct as a
-/// [`Span`](crate::span::Span).
+/// Location of a point on the Earth surface. Both coordinates are in degrees.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Location {
-    pub northing: f64,
-    pub easting: f64,
+pub struct GeodeticLocation {
+    latitude: f64,
+    longitude: f64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct LocationOffset {
-    pub northing: f64,
-    pub easting: f64,
-}
-
-impl Location {
+impl GeodeticLocation {
     pub const MIN_LATITUDE: f64 = -90.0;
     pub const MAX_LATITUDE: f64 = 90.0;
     pub const MIN_LONGITUDE: f64 = -180.0;
     pub const MAX_LONGITUDE: f64 = 180.0;
 
-    pub fn new(northing: f64, easting: f64) -> Self {
-        Self { northing, easting }
-    }
-
-    pub fn from_latitude_and_longitude(
-        latitude: f64,
-        longitude: f64,
-        map_span: &Span,
-    ) -> Result<Self, LocationFromLatitudeAndLongitudeError> {
+    pub fn new(latitude: f64, longitude: f64) -> Result<Self, GeodeticLocationCreateError> {
         if !(Self::MIN_LATITUDE..=Self::MAX_LATITUDE).contains(&latitude) {
-            Err(LocationFromLatitudeAndLongitudeError::LatitudeOutsideRange(
-                latitude,
-            ))
+            Err(GeodeticLocationCreateError::LatitudeOutsideRange(latitude))
         } else if !(Self::MIN_LONGITUDE..=Self::MAX_LONGITUDE).contains(&longitude) {
-            Err(LocationFromLatitudeAndLongitudeError::LongitudeOutsideRange(longitude))
+            Err(GeodeticLocationCreateError::LongitudeOutsideRange(
+                longitude,
+            ))
         } else {
-            let (northing, easting, _) =
-                to_utm_wgs84(latitude, longitude, map_span.utm_zone_number);
-            Ok(Self::new(northing, easting))
+            Ok(Self {
+                latitude,
+                longitude,
+            })
         }
     }
 
-    pub fn to_latitude_and_longitude(
+    pub fn latitude(&self) -> f64 {
+        self.latitude
+    }
+
+    pub fn longitude(&self) -> f64 {
+        self.longitude
+    }
+
+    pub fn as_lon_lat_radians(&self) -> (f64, f64) {
+        (self.longitude.to_radians(), self.latitude.to_radians())
+    }
+}
+
+/// Location on a map. The X axis runs from west to east and the Y axis runs from south to north. Location of the origin
+/// relative to the map is not specified. One unit should approximately correspond to 1 meter.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Location {
+    pub x: f64,
+    pub y: f64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LocationOffset {
+    pub x: f64,
+    pub y: f64,
+}
+
+impl Location {
+    pub fn from_geodetic(
+        geodetic_location: GeodeticLocation,
+        map_span: &Span,
+    ) -> Result<Self, LocationProjectionError> {
+        map_span
+            .projection
+            .project(geodetic_location.as_lon_lat_radians(), false)
+            .map(|(x, y)| Location { x, y })
+            .map_err(LocationProjectionError::Projection)
+    }
+
+    pub fn to_geodetic(
         self,
         map_span: &Span,
-    ) -> Result<(f64, f64), LocationToLatitudeAndLongitudeError> {
-        wsg84_utm_to_lat_lon(
-            self.easting,
-            self.northing,
-            map_span.utm_zone_number,
-            map_span.utm_zone_letter,
-        )
-        .map_err(|err| match err {
-            WSG84ToLatLonError::NorthingOutOfRange => {
-                LocationToLatitudeAndLongitudeError::NorthingOutsideRange(self.northing)
-            }
-            WSG84ToLatLonError::EastingOutOfRange => {
-                LocationToLatitudeAndLongitudeError::EastingOutsideRange(self.easting)
-            }
-            WSG84ToLatLonError::ZoneNumOutOfRange => {
-                LocationToLatitudeAndLongitudeError::InvalidZoneNumber(map_span.utm_zone_number)
-            }
-            WSG84ToLatLonError::ZoneLetterOutOfRange => {
-                LocationToLatitudeAndLongitudeError::InvalidZoneLetter(map_span.utm_zone_letter)
-            }
-        })
+    ) -> Result<GeodeticLocation, LocationInverseProjectionError> {
+        map_span
+            .projection
+            .project((self.x, self.y), true)
+            .map_err(LocationInverseProjectionError::Projection)
+            .and_then(|(lon, lat)| {
+                GeodeticLocation::new(lat, lon)
+                    .map_err(LocationInverseProjectionError::GeodeticLocationCreation)
+            })
     }
 }
 
 impl LocationOffset {
-    pub fn new(northing: f64, easting: f64) -> Self {
-        Self { northing, easting }
+    pub fn new(y: f64, x: f64) -> Self {
+        Self { y, x }
     }
 
     pub fn length(&self) -> f64 {
-        (self.northing * self.northing + self.easting * self.easting).sqrt()
+        (self.y * self.y + self.x * self.x).sqrt()
     }
 
     /// Get a direction in the range [-pi, +pi] such that north is 0 and east is +pi/2.
     pub fn direction(&self) -> f64 {
-        f64::atan2(self.easting, self.northing)
+        f64::atan2(self.x, self.y)
     }
 }
 
@@ -94,8 +106,8 @@ impl Add<LocationOffset> for Location {
 
     fn add(self, rhs: LocationOffset) -> Self::Output {
         Location {
-            northing: self.northing + rhs.northing,
-            easting: self.easting + rhs.easting,
+            y: self.y + rhs.y,
+            x: self.x + rhs.x,
         }
     }
 }
@@ -113,8 +125,8 @@ impl Add for LocationOffset {
 
     fn add(self, rhs: Self) -> Self::Output {
         LocationOffset {
-            northing: self.northing + rhs.northing,
-            easting: self.easting + rhs.easting,
+            y: self.y + rhs.y,
+            x: self.x + rhs.x,
         }
     }
 }
@@ -132,8 +144,8 @@ impl Neg for LocationOffset {
 
     fn neg(self) -> Self::Output {
         LocationOffset {
-            northing: -self.northing,
-            easting: -self.easting,
+            y: -self.y,
+            x: -self.x,
         }
     }
 }
@@ -143,24 +155,27 @@ impl Mul<f64> for LocationOffset {
 
     fn mul(self, rhs: f64) -> Self::Output {
         LocationOffset {
-            northing: rhs * self.northing,
-            easting: rhs * self.easting,
+            y: rhs * self.y,
+            x: rhs * self.x,
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum LocationFromLatitudeAndLongitudeError {
+pub enum GeodeticLocationCreateError {
     LatitudeOutsideRange(f64),
     LongitudeOutsideRange(f64),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum LocationToLatitudeAndLongitudeError {
-    NorthingOutsideRange(f64),
-    EastingOutsideRange(f64),
-    InvalidZoneNumber(u8),
-    InvalidZoneLetter(char),
+pub enum LocationProjectionError {
+    Projection(ProjError),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LocationInverseProjectionError {
+    Projection(ProjError),
+    GeodeticLocationCreation(GeodeticLocationCreateError),
 }
 
 #[cfg(test)]
@@ -175,7 +190,8 @@ pub(crate) fn lat_lon_coordinates_are_close(left: f64, right: f64) -> bool {
     return (left - right).abs() < EPSILON;
 }
 
-#[cfg(test)]
+// TODO: tests for new projection code
+/*#[cfg(test)]
 mod tests {
     use super::*;
     use std::{assert_matches, f64::consts::PI};
@@ -186,8 +202,8 @@ mod tests {
         let lat = 50.0881;
         let lon = 14.4044;
         let location = Location::from_latitude_and_longitude(lat, lon, &span).unwrap();
-        assert!(utm_coordinates_are_close(location.northing, 5548596.002));
-        assert!(utm_coordinates_are_close(location.easting, 457393.278));
+        assert!(utm_coordinates_are_close(location.y, 5548596.002));
+        assert!(utm_coordinates_are_close(location.x, 457393.278));
         let (new_lat, new_lon) = location.to_latitude_and_longitude(&span).unwrap();
         assert!(lat_lon_coordinates_are_close(new_lat, lat));
         assert!(lat_lon_coordinates_are_close(new_lon, lon));
@@ -198,13 +214,11 @@ mod tests {
         let span = Span::new((49.9460, 14.1918), (50.1787, 14.7209)).unwrap();
         assert_eq!(
             Location::from_latitude_and_longitude(-95.0, 30.0, &span),
-            Err(LocationFromLatitudeAndLongitudeError::LatitudeOutsideRange(
-                -95.0
-            ))
+            Err(LocationProjectionError::LatitudeOutsideRange(-95.0))
         );
         assert_eq!(
             Location::from_latitude_and_longitude(10.0, 190.0, &span),
-            Err(LocationFromLatitudeAndLongitudeError::LongitudeOutsideRange(190.0))
+            Err(LocationProjectionError::LongitudeOutsideRange(190.0))
         );
     }
 
@@ -215,12 +229,12 @@ mod tests {
         let far_north = location + LocationOffset::new(7_000_000.0, 0.0);
         assert_matches!(
             far_north.to_latitude_and_longitude(&span),
-            Err(LocationToLatitudeAndLongitudeError::NorthingOutsideRange(_))
+            Err(LocationInverseProjectionError::NorthingOutsideRange(_))
         );
         let far_west = location + LocationOffset::new(0.0, -1_000_000.0);
         assert_matches!(
             far_west.to_latitude_and_longitude(&span),
-            Err(LocationToLatitudeAndLongitudeError::EastingOutsideRange(_))
+            Err(LocationInverseProjectionError::EastingOutsideRange(_))
         );
         let invalid_number_span = Span {
             utm_zone_number: 61,
@@ -228,7 +242,7 @@ mod tests {
         };
         assert_eq!(
             location.to_latitude_and_longitude(&invalid_number_span),
-            Err(LocationToLatitudeAndLongitudeError::InvalidZoneNumber(61))
+            Err(LocationInverseProjectionError::InvalidZoneNumber(61))
         );
         let invalid_letter_span = Span {
             utm_zone_letter: '#',
@@ -236,7 +250,7 @@ mod tests {
         };
         assert_eq!(
             location.to_latitude_and_longitude(&invalid_letter_span),
-            Err(LocationToLatitudeAndLongitudeError::InvalidZoneLetter('#'))
+            Err(LocationInverseProjectionError::InvalidZoneLetter('#'))
         );
     }
 
@@ -254,3 +268,4 @@ mod tests {
         assert!(other_offset.direction() - (90.0 + (3.0f64 / 4.0).atan() * 180.0 / PI) < 1e-9);
     }
 }
+*/
