@@ -168,12 +168,12 @@ pub enum GeodeticLocationCreateError {
     LongitudeOutsideRange(f64),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Debug)]
 pub enum LocationProjectionError {
     Projection(ProjError),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Debug)]
 pub enum LocationInverseProjectionError {
     Projection(ProjError),
     GeodeticLocationCreation(GeodeticLocationCreateError),

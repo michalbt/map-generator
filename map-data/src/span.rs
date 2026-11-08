@@ -2,7 +2,7 @@ use proj::{Proj, ProjCreateError, ProjError};
 
 use crate::location::GeodeticLocation;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Span {
     pub x_low: f64,
     pub x_high: f64,
@@ -17,8 +17,8 @@ impl Span {
         northeast_corner: GeodeticLocation,
         projection_string: &str,
     ) -> Result<Self, SpanCreationError> {
-        if (southwest_corner.latitude() > northeast_corner.latitude()
-            || southwest_corner.longitude() > northeast_corner.longitude())
+        if southwest_corner.latitude() > northeast_corner.latitude()
+            || southwest_corner.longitude() > northeast_corner.longitude()
         {
             return Err(SpanCreationError::MismatchedCorners);
         }
@@ -40,7 +40,7 @@ impl Span {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum SpanCreationError {
     ProjectionCreation(ProjCreateError),
     Projection(ProjError),
