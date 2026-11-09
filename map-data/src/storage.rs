@@ -4,12 +4,13 @@ use slotmap::SlotMap;
 
 use crate::{
     area::{Area, AreaKey, AreaSource, Ring},
+    keyed_mapping::KeyedMapping,
     location::Location,
     node::{Node, NodeKey},
     object::{Object, ObjectKey},
     relation::{Relation, RelationKey, RelationMember},
     span::Span,
-    tags::TagMapping,
+    tags::TagKey,
     way::{Way, WayKey},
 };
 
@@ -20,11 +21,11 @@ pub struct Storage {
     areas: SlotMap<AreaKey, Area>,
     relations: SlotMap<RelationKey, Relation>,
     map_span: Span,
-    tag_mapping: TagMapping,
+    tag_mapping: KeyedMapping<TagKey>,
 }
 
 impl Storage {
-    pub fn new(map_span: Span, tag_mapping: TagMapping) -> Storage {
+    pub fn new(map_span: Span, tag_mapping: KeyedMapping<TagKey>) -> Storage {
         Storage {
             nodes: SlotMap::with_key(),
             ways: SlotMap::with_key(),
