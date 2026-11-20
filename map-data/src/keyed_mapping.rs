@@ -15,12 +15,25 @@ pub struct KeyedMapping<K: KeyedMappingKey> {
 // Remove the $order argument and use {index()} after RFC 3086 is stabilized
 // https://github.com/rust-lang/rust/issues/83527
 macro_rules! use_keyed_mapping_with_well_known_keys {
-    ($key_type:ty, $(($order:literal, $key_str:literal, $const_ident:ident)),* $(,)?) => {
+    ($visibility:vis $key_type:ident, $(($order:literal, $key_str:literal, $const_ident:ident)),* $(,)?) => {
         use $crate::keyed_mapping::KeyedMapping;
+
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        $visibility struct $key_type(usize);
+
+        impl KeyedMappingKey for $key_type {
+            fn from_raw(raw: usize) -> Self {
+                $key_type(raw)
+            }
+
+            fn into_raw(self) -> usize {
+                self.0
+            }
+        }
 
         impl KeyedMapping<$key_type> {
             $(
-                pub const $const_ident: usize = $order;
+                pub const $const_ident: $key_type = $key_type($order);
             )*
 
             pub fn new() -> Self {
@@ -29,7 +42,7 @@ macro_rules! use_keyed_mapping_with_well_known_keys {
                 $({
                     forward.push($key_str.to_string());
                     assert_eq!($order, forward.len());
-                    reverse.insert($key_str.to_string(), <$key_type>::from_raw($order));
+                    reverse.insert($key_str.to_string(), $key_type($order));
                 })*
                 Self { forward, reverse }
             }

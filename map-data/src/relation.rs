@@ -3,8 +3,10 @@ use std::collections::HashMap;
 use slotmap::new_key_type;
 
 use crate::{
+    keyed_mapping::KeyedMappingKey,
     object::{ObjectKey, OsmId, impl_object},
     tags::Tags,
+    use_keyed_mapping_with_well_known_keys,
 };
 
 new_key_type! { pub struct RelationKey; }
@@ -41,14 +43,23 @@ impl_object!(Relation);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelationMember {
     pub object: ObjectKey,
-    pub role: Option<String>,
+    /// `None` = has a role but the app does not care about it,
+    /// `Some(EMPTY_ROLE_KEY)` = has an empty role
+    pub role: Option<RelationRoleKey>,
 }
 
 impl RelationMember {
-    pub fn new<K: Into<ObjectKey>>(key: K, role: Option<String>) -> Self {
+    pub fn new<K: Into<ObjectKey>>(key: K, role: Option<RelationRoleKey>) -> Self {
         Self {
             object: key.into(),
             role,
         }
     }
 }
+
+use_keyed_mapping_with_well_known_keys!(
+    pub RelationRoleKey,
+    (0, "", EMPTY_ROLE_KEY),
+    (1, "outer", OUTER_KEY),
+    (2, "inner", INNER_KEY),
+);

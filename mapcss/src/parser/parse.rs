@@ -1,5 +1,5 @@
 use cssparser::Parser;
-use map_data::{KeyedMapping, TagKey};
+use map_data::{KeyedMapping, RelationRoleKey, TagKey};
 
 use crate::error::MapCssParseError;
 
@@ -15,6 +15,7 @@ pub(crate) trait Parse {
 #[derive(Debug, Default)]
 pub(crate) struct ParseContext {
     pub tag_mapping: KeyedMapping<TagKey>,
+    pub relation_role_mapping: KeyedMapping<RelationRoleKey>,
 }
 
 impl ParseContext {

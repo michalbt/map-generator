@@ -16,5 +16,6 @@ pub(crate) use keyed_mapping::use_keyed_mapping_with_well_known_keys;
 pub use crate::area::AreaSource;
 pub use crate::keyed_mapping::KeyedMapping;
 pub use crate::object::ObjectKey;
+pub use crate::relation::RelationRoleKey;
 pub use crate::storage::Storage;
 pub use crate::tags::TagKey;

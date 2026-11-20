@@ -6,7 +6,7 @@ use crate::{
     parser::parse::{Parse, ParseContext},
     types::selector::{
         BasicSelector, ObjectType, Regex, SelectorAlternatives, SelectorChain, TagNumericValue,
-        TagStringValue, TagValue, Test,
+        TagStringValue, TagTest, TagValue,
     },
 };
 
@@ -167,29 +167,30 @@ fn parse_matches_operator(input: &mut Parser) -> Result<(), ()> {
 fn parse_test_content<'i>(
     input: &mut Parser<'i, '_>,
     ctx: &mut ParseContext,
-) -> Result<Test, MapCssParseError<'i>> {
+) -> Result<TagTest, MapCssParseError<'i>> {
     if let Ok(()) = input.try_parse(|inp| inp.expect_delim('!')) {
-        TagKey::parse(input, ctx).map(Test::NotSet)
+        TagKey::parse(input, ctx).map(TagTest::NotSet)
     } else if let Ok(tag_key) = input.try_parse(|inp| TagKey::parse(inp, ctx)) {
         // Order is important: operators must be before their prefixes ('=~' before '=' etc.)
         if let Ok(()) = input.try_parse(parse_matches_operator) {
-            Regex::parse(input, ctx).map(move |regex| Test::Matches(tag_key, regex))
+            Regex::parse(input, ctx).map(move |regex| TagTest::Matches(tag_key, regex))
         } else if let Ok(()) = input.try_parse(parse_less_than_or_equal_operator) {
             TagNumericValue::parse(input, ctx)
-                .map(move |value| Test::LessThanOrEqual(tag_key, value))
+                .map(move |value| TagTest::LessThanOrEqual(tag_key, value))
         } else if let Ok(()) = input.try_parse(parse_greater_than_or_equal_operator) {
             TagNumericValue::parse(input, ctx)
-                .map(move |value| Test::GreaterThanOrEqual(tag_key, value))
+                .map(move |value| TagTest::GreaterThanOrEqual(tag_key, value))
         } else if let Ok(()) = input.try_parse(parse_not_equal_operator) {
-            TagValue::parse(input, ctx).map(move |value| Test::NotEqual(tag_key, value))
+            TagValue::parse(input, ctx).map(move |value| TagTest::NotEqual(tag_key, value))
         } else if let Ok(()) = input.try_parse(parse_less_than_operator) {
-            TagNumericValue::parse(input, ctx).map(move |value| Test::LessThan(tag_key, value))
+            TagNumericValue::parse(input, ctx).map(move |value| TagTest::LessThan(tag_key, value))
         } else if let Ok(()) = input.try_parse(parse_greater_than_operator) {
-            TagNumericValue::parse(input, ctx).map(move |value| Test::GreaterThan(tag_key, value))
+            TagNumericValue::parse(input, ctx)
+                .map(move |value| TagTest::GreaterThan(tag_key, value))
         } else if let Ok(()) = input.try_parse(parse_equal_operator) {
-            TagValue::parse(input, ctx).map(move |value| Test::Equal(tag_key, value))
+            TagValue::parse(input, ctx).map(move |value| TagTest::Equal(tag_key, value))
         } else if let Ok(()) = input.try_parse(|inp| inp.expect_exhausted()) {
-            Ok(Test::Set(tag_key))
+            Ok(TagTest::Set(tag_key))
         } else {
             Err(input.new_custom_error(MapCssErrorKind::InvalidTokenInsideTest))
         }
@@ -198,7 +199,7 @@ fn parse_test_content<'i>(
     }
 }
 
-impl Parse for Test {
+impl Parse for TagTest {
     fn parse<'i>(
         input: &mut Parser<'i, '_>,
         ctx: &mut ParseContext,
@@ -218,7 +219,7 @@ impl Parse for BasicSelector {
         let object_type = ObjectType::parse(input, ctx)?;
         let mut tests = vec![];
         loop {
-            match Test::parse(input, ctx) {
+            match TagTest::parse(input, ctx) {
                 Ok(test) => tests.push(test),
                 Err(e)
                     if matches!(

@@ -1,10 +1,6 @@
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 
-use map_data::{AreaSource, ObjectKey, Storage, TagKey};
-
-pub(crate) trait Selector {
-    fn matches(&self, key: ObjectKey, storage: &Storage) -> bool;
-}
+use map_data::{AreaSource, KeyedMapping, ObjectKey, RelationRoleKey, Storage, TagKey};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct SelectorAlternatives {
@@ -15,9 +11,7 @@ impl SelectorAlternatives {
     pub fn new(alternatives: Vec<SelectorChain>) -> Self {
         Self { alternatives }
     }
-}
 
-impl Selector for SelectorAlternatives {
     fn matches(&self, key: ObjectKey, storage: &Storage) -> bool {
         self.alternatives
             .iter()
@@ -35,13 +29,39 @@ impl SelectorChain {
         Self { chain }
     }
 
+    fn relation_role_matches(
+        role_tests: &[RoleTest],
+        parent_key: ObjectKey,
+        child_key: ObjectKey,
+        storage: &Storage,
+    ) -> bool {
+        if role_tests.is_empty() {
+            true
+        } else if let ObjectKey::Relation(relation_key) = parent_key {
+            let relation_role = storage[relation_key]
+                .members()
+                .iter()
+                .find(|m| m.object == child_key)
+                .expect("child must be contained in parent")
+                .role;
+            role_tests.iter().all(|t| t.matches(relation_role))
+        } else {
+            // Not in a relation => all role tests fail
+            false
+        }
+    }
+
     fn selector_subchain_matches(
         selector: &BasicSelector,
         parent_subchain: &[BasicSelector],
+        child_role_tests: Option<(ObjectKey, &[RoleTest])>,
         key: ObjectKey,
         storage: &Storage,
     ) -> bool {
         selector.matches(key, storage)
+            && child_role_tests.is_none_or(|(child_key, role_tests)| {
+                Self::relation_role_matches(role_tests, key, child_key, storage)
+            })
             && if let Some((parent_selector, parent_subchain_rest)) = parent_subchain.split_last() {
                 let mut parent_objects = storage[key]
                     .containing_relations()
@@ -68,6 +88,7 @@ impl SelectorChain {
                     Self::selector_subchain_matches(
                         parent_selector,
                         parent_subchain_rest,
+                        Some((key, &selector.role_tests)),
                         parent_key,
                         storage,
                     )
@@ -76,12 +97,10 @@ impl SelectorChain {
                 true
             }
     }
-}
 
-impl Selector for SelectorChain {
     fn matches(&self, key: ObjectKey, storage: &Storage) -> bool {
         if let Some((last_selector, parent_subchain)) = self.chain.split_last() {
-            Self::selector_subchain_matches(last_selector, parent_subchain, key, storage)
+            Self::selector_subchain_matches(last_selector, parent_subchain, None, key, storage)
         } else {
             false
         }
@@ -91,19 +110,24 @@ impl Selector for SelectorChain {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BasicSelector {
     object_type: ObjectType,
-    tests: Vec<Test>,
+    tests: Vec<TagTest>,
+    role_tests: Vec<RoleTest>,
 }
 
 impl BasicSelector {
-    pub fn new(object_type: ObjectType, tests: Vec<Test>) -> Self {
-        Self { object_type, tests }
+    pub fn new(object_type: ObjectType, tests: Vec<TagTest>, role_tests: Vec<RoleTest>) -> Self {
+        Self {
+            object_type,
+            tests,
+            role_tests,
+        }
     }
-}
 
-impl Selector for BasicSelector {
     fn matches(&self, key: ObjectKey, storage: &Storage) -> bool {
-        self.object_type.matches(key, storage)
-            && self.tests.iter().all(|test| test.matches(key, storage))
+        self.object_type.matches(key, storage) && {
+            let object_tags = storage[key].tags();
+            self.tests.iter().all(|test| test.matches(&object_tags))
+        }
     }
 }
 
@@ -118,7 +142,8 @@ pub(crate) enum ObjectType {
     Any,
 }
 
-impl Selector for ObjectType {
+impl ObjectType {
+    // TODO: refactor after Area removal, ideally to not use &Storage
     fn matches(&self, key: ObjectKey, storage: &Storage) -> bool {
         match (*self, key) {
             (Self::Node, ObjectKey::Node(_)) => true,
@@ -142,7 +167,7 @@ impl Selector for ObjectType {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Test {
+pub(crate) enum TagTest {
     Set(TagKey),
     NotSet(TagKey),
     Equal(TagKey, TagValue),
@@ -154,9 +179,8 @@ pub(crate) enum Test {
     Matches(TagKey, Regex),
 }
 
-impl Selector for Test {
-    fn matches(&self, key: ObjectKey, storage: &Storage) -> bool {
-        let object_tags = storage[key].tags();
+impl TagTest {
+    fn matches(&self, object_tags: &HashMap<TagKey, String>) -> bool {
         match self {
             Self::Set(tag_key) => object_tags.contains_key(tag_key),
             Self::NotSet(tag_key) => !object_tags.contains_key(tag_key),
@@ -185,6 +209,26 @@ impl Selector for Test {
             Self::Matches(tag_key, Regex(regex)) => object_tags
                 .get(tag_key)
                 .is_some_and(|val| regex.is_match(val)),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum RoleTest {
+    RoleSet,
+    RoleNotSet,
+    RoleEqual(RelationRoleKey),
+    RoleNotEqual(RelationRoleKey),
+}
+
+impl RoleTest {
+    fn matches(&self, role: Option<RelationRoleKey>) -> bool {
+        const EMPTY_ROLE_KEY: RelationRoleKey = KeyedMapping::<RelationRoleKey>::EMPTY_ROLE_KEY;
+        match self {
+            Self::RoleSet => role != Some(EMPTY_ROLE_KEY),
+            Self::RoleNotSet => role == Some(EMPTY_ROLE_KEY),
+            Self::RoleEqual(key) => role == Some(*key),
+            Self::RoleNotEqual(key) => role != Some(*key),
         }
     }
 }

@@ -8,7 +8,7 @@ use crate::{
     location::Location,
     node::{Node, NodeKey},
     object::{Object, ObjectKey},
-    relation::{Relation, RelationKey, RelationMember},
+    relation::{Relation, RelationKey, RelationMember, RelationRoleKey},
     span::Span,
     tags::TagKey,
     way::{Way, WayKey},
@@ -22,10 +22,15 @@ pub struct Storage {
     relations: SlotMap<RelationKey, Relation>,
     map_span: Span,
     tag_mapping: KeyedMapping<TagKey>,
+    relation_role_mapping: KeyedMapping<RelationRoleKey>,
 }
 
 impl Storage {
-    pub fn new(map_span: Span, tag_mapping: KeyedMapping<TagKey>) -> Storage {
+    pub fn new(
+        map_span: Span,
+        tag_mapping: KeyedMapping<TagKey>,
+        relation_role_mapping: KeyedMapping<RelationRoleKey>,
+    ) -> Storage {
         Storage {
             nodes: SlotMap::with_key(),
             ways: SlotMap::with_key(),
@@ -33,6 +38,7 @@ impl Storage {
             relations: SlotMap::with_key(),
             map_span,
             tag_mapping,
+            relation_role_mapping,
         }
     }
 
