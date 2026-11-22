@@ -1,14 +1,16 @@
 use cssparser::{ParseErrorKind, Parser, ascii_case_insensitive_map};
-use map_data::TagKey;
+use map_data::{RelationRoleKey, TagKey};
 
 use crate::{
     error::{MapCssErrorKind, MapCssParseError},
     parser::parse::{Parse, ParseContext},
     types::selector::{
-        BasicSelector, ObjectType, Regex, SelectorAlternatives, SelectorChain, TagNumericValue,
-        TagStringValue, TagTest, TagValue,
+        BasicSelector, ObjectType, Regex, RoleTest, SelectorAlternatives, SelectorChain,
+        TagNumericValue, TagStringValue, TagTest, TagValue,
     },
 };
+
+const ROLE_PSEUDO_TAG: &str = "role";
 
 fn parse_non_special_object_type(input: &mut Parser) -> Result<ObjectType, ()> {
     if let Ok(identifier) = input.expect_ident() {
@@ -47,7 +49,13 @@ impl Parse for ObjectType {
     }
 }
 
-impl Parse for TagKey {
+#[derive(Clone, Debug, PartialEq)]
+enum TagKeyOrPseudoTag {
+    TagKey(TagKey),
+    Role,
+}
+
+impl Parse for TagKeyOrPseudoTag {
     fn parse<'i>(
         input: &mut Parser<'i, '_>,
         ctx: &mut ParseContext,
@@ -55,10 +63,29 @@ impl Parse for TagKey {
         if let Ok(string) =
             input.try_parse(|inp| inp.expect_ident_or_string().map(ToString::to_string))
         {
-            let tag_key = ctx.tag_mapping.get_or_insert(&string);
-            Ok(tag_key)
+            if string == ROLE_PSEUDO_TAG {
+                Ok(TagKeyOrPseudoTag::Role)
+            } else {
+                let tag_key = ctx.tag_mapping.get_or_insert(&string);
+                Ok(TagKeyOrPseudoTag::TagKey(tag_key))
+            }
         } else {
             Err(input.new_custom_error(MapCssErrorKind::TagKeyExpected))
+        }
+    }
+}
+
+impl Parse for TagKey {
+    fn parse<'i>(
+        input: &mut Parser<'i, '_>,
+        ctx: &mut ParseContext,
+    ) -> Result<Self, MapCssParseError<'i>> {
+        match input.try_parse(ctx.parse::<TagKeyOrPseudoTag>()) {
+            Ok(TagKeyOrPseudoTag::TagKey(tag_key)) => Ok(tag_key),
+            Ok(TagKeyOrPseudoTag::Role) => {
+                Err(input.new_custom_error(MapCssErrorKind::InvalidPseudoTagUsage))
+            }
+            Err(e) => Err(e),
         }
     }
 }
@@ -164,42 +191,85 @@ fn parse_matches_operator(input: &mut Parser) -> Result<(), ()> {
     input.expect_delim('~').map_err(|_| ())
 }
 
+impl Parse for RelationRoleKey {
+    fn parse<'i>(
+        input: &mut Parser<'i, '_>,
+        ctx: &mut ParseContext,
+    ) -> Result<Self, MapCssParseError<'i>> {
+        if let Ok(string) =
+            input.try_parse(|inp| inp.expect_ident_or_string().map(ToString::to_string))
+        {
+            let relation_role_key = ctx.relation_role_mapping.get_or_insert(&string);
+            Ok(relation_role_key)
+        } else {
+            Err(input.new_custom_error(MapCssErrorKind::RelationRoleExpected))
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum TagOrRoleTest {
+    TagTest(TagTest),
+    RoleTest(RoleTest),
+}
+
 fn parse_test_content<'i>(
     input: &mut Parser<'i, '_>,
     ctx: &mut ParseContext,
-) -> Result<TagTest, MapCssParseError<'i>> {
+) -> Result<TagOrRoleTest, MapCssParseError<'i>> {
     if let Ok(()) = input.try_parse(|inp| inp.expect_delim('!')) {
-        TagKey::parse(input, ctx).map(TagTest::NotSet)
-    } else if let Ok(tag_key) = input.try_parse(|inp| TagKey::parse(inp, ctx)) {
+        TagKeyOrPseudoTag::parse(input, ctx).map(|t| match t {
+            TagKeyOrPseudoTag::Role => TagOrRoleTest::RoleTest(RoleTest::RoleNotSet),
+            TagKeyOrPseudoTag::TagKey(tag_key) => TagOrRoleTest::TagTest(TagTest::NotSet(tag_key)),
+        })
+    } else if let Ok(tag_key_or_pseudo_tag) =
+        input.try_parse(|inp| TagKeyOrPseudoTag::parse(inp, ctx))
+    {
         // Order is important: operators must be before their prefixes ('=~' before '=' etc.)
-        if let Ok(()) = input.try_parse(parse_matches_operator) {
-            Regex::parse(input, ctx).map(move |regex| TagTest::Matches(tag_key, regex))
-        } else if let Ok(()) = input.try_parse(parse_less_than_or_equal_operator) {
-            TagNumericValue::parse(input, ctx)
-                .map(move |value| TagTest::LessThanOrEqual(tag_key, value))
-        } else if let Ok(()) = input.try_parse(parse_greater_than_or_equal_operator) {
-            TagNumericValue::parse(input, ctx)
-                .map(move |value| TagTest::GreaterThanOrEqual(tag_key, value))
-        } else if let Ok(()) = input.try_parse(parse_not_equal_operator) {
-            TagValue::parse(input, ctx).map(move |value| TagTest::NotEqual(tag_key, value))
-        } else if let Ok(()) = input.try_parse(parse_less_than_operator) {
-            TagNumericValue::parse(input, ctx).map(move |value| TagTest::LessThan(tag_key, value))
-        } else if let Ok(()) = input.try_parse(parse_greater_than_operator) {
-            TagNumericValue::parse(input, ctx)
-                .map(move |value| TagTest::GreaterThan(tag_key, value))
-        } else if let Ok(()) = input.try_parse(parse_equal_operator) {
-            TagValue::parse(input, ctx).map(move |value| TagTest::Equal(tag_key, value))
-        } else if let Ok(()) = input.try_parse(|inp| inp.expect_exhausted()) {
-            Ok(TagTest::Set(tag_key))
-        } else {
-            Err(input.new_custom_error(MapCssErrorKind::InvalidTokenInsideTest))
+        match tag_key_or_pseudo_tag {
+            TagKeyOrPseudoTag::Role => (if let Ok(()) = input.try_parse(parse_not_equal_operator) {
+                RelationRoleKey::parse(input, ctx).map(move |value| RoleTest::RoleNotEqual(value))
+            } else if let Ok(()) = input.try_parse(parse_equal_operator) {
+                RelationRoleKey::parse(input, ctx).map(move |value| RoleTest::RoleEqual(value))
+            } else if let Ok(()) = input.try_parse(|inp| inp.expect_exhausted()) {
+                Ok(RoleTest::RoleSet)
+            } else {
+                Err(input.new_custom_error(MapCssErrorKind::InvalidTokenInsideRoleTest))
+            })
+            .map(TagOrRoleTest::RoleTest),
+            TagKeyOrPseudoTag::TagKey(tag_key) => {
+                (if let Ok(()) = input.try_parse(parse_matches_operator) {
+                    Regex::parse(input, ctx).map(move |regex| TagTest::Matches(tag_key, regex))
+                } else if let Ok(()) = input.try_parse(parse_less_than_or_equal_operator) {
+                    TagNumericValue::parse(input, ctx)
+                        .map(move |value| TagTest::LessThanOrEqual(tag_key, value))
+                } else if let Ok(()) = input.try_parse(parse_greater_than_or_equal_operator) {
+                    TagNumericValue::parse(input, ctx)
+                        .map(move |value| TagTest::GreaterThanOrEqual(tag_key, value))
+                } else if let Ok(()) = input.try_parse(parse_not_equal_operator) {
+                    TagValue::parse(input, ctx).map(move |value| TagTest::NotEqual(tag_key, value))
+                } else if let Ok(()) = input.try_parse(parse_less_than_operator) {
+                    TagNumericValue::parse(input, ctx)
+                        .map(move |value| TagTest::LessThan(tag_key, value))
+                } else if let Ok(()) = input.try_parse(parse_greater_than_operator) {
+                    TagNumericValue::parse(input, ctx)
+                        .map(move |value| TagTest::GreaterThan(tag_key, value))
+                } else if let Ok(()) = input.try_parse(parse_equal_operator) {
+                    TagValue::parse(input, ctx).map(move |value| TagTest::Equal(tag_key, value))
+                } else if let Ok(()) = input.try_parse(|inp| inp.expect_exhausted()) {
+                    Ok(TagTest::Set(tag_key))
+                } else {
+                    Err(input.new_custom_error(MapCssErrorKind::InvalidTokenInsideTagTest))
+                })
+                .map(TagOrRoleTest::TagTest)
+            }
         }
     } else {
         Err(input.new_custom_error(MapCssErrorKind::TagKeyOrExclamationExpected))
     }
 }
 
-impl Parse for TagTest {
+impl Parse for TagOrRoleTest {
     fn parse<'i>(
         input: &mut Parser<'i, '_>,
         ctx: &mut ParseContext,
@@ -217,10 +287,12 @@ impl Parse for BasicSelector {
         ctx: &mut ParseContext,
     ) -> Result<Self, MapCssParseError<'i>> {
         let object_type = ObjectType::parse(input, ctx)?;
-        let mut tests = vec![];
+        let mut tag_tests = vec![];
+        let mut role_tests = vec![];
         loop {
-            match TagTest::parse(input, ctx) {
-                Ok(test) => tests.push(test),
+            match TagOrRoleTest::parse(input, ctx) {
+                Ok(TagOrRoleTest::TagTest(tag_test)) => tag_tests.push(tag_test),
+                Ok(TagOrRoleTest::RoleTest(role_test)) => role_tests.push(role_test),
                 Err(e)
                     if matches!(
                         e.kind,
@@ -228,7 +300,7 @@ impl Parse for BasicSelector {
                     ) =>
                 {
                     // no more tests => stop parsing and return the results
-                    return Ok(BasicSelector::new(object_type, tests));
+                    return Ok(BasicSelector::new(object_type, tag_tests, role_tests));
                 }
                 Err(e) => return Err(e),
             }
