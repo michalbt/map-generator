@@ -1,6 +1,6 @@
 use std::{collections::HashMap, str::FromStr};
 
-use map_data::{KeyedMapping, ObjectKey, RelationRoleKey, Storage, TagKey};
+use map_data::{ObjectKey, RelationRoleKey, Storage, TagKey};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct SelectorAlternatives {
@@ -211,7 +211,7 @@ pub(crate) enum RoleTest {
 
 impl RoleTest {
     fn matches(&self, role: Option<RelationRoleKey>) -> bool {
-        const EMPTY_ROLE_KEY: RelationRoleKey = KeyedMapping::<RelationRoleKey>::EMPTY_ROLE_KEY;
+        const EMPTY_ROLE_KEY: RelationRoleKey = RelationRoleKey::EMPTY_ROLE_KEY;
         match self {
             Self::Set => role != Some(EMPTY_ROLE_KEY),
             Self::NotSet => role == Some(EMPTY_ROLE_KEY),

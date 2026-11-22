@@ -4,7 +4,6 @@ use slotmap::new_key_type;
 
 use crate::{
     TagKey,
-    keyed_mapping::KeyedMappingKey,
     object::{ObjectKey, OsmId, impl_object},
     tags::Tags,
     use_keyed_mapping_with_well_known_keys,
@@ -41,10 +40,7 @@ impl Relation {
     }
 
     pub fn defines_area(&self) -> bool {
-        self.tags
-            .get(&KeyedMapping::<TagKey>::TYPE_KEY)
-            .map(Deref::deref)
-            == Some(RELATION_TYPE_MULTIPOLYGON)
+        self.tags.get(&TagKey::TYPE_KEY).map(Deref::deref) == Some(RELATION_TYPE_MULTIPOLYGON)
     }
 }
 

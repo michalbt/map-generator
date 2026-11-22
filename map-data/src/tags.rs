@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{keyed_mapping::KeyedMappingKey, use_keyed_mapping_with_well_known_keys};
+use crate::use_keyed_mapping_with_well_known_keys;
 
 use_keyed_mapping_with_well_known_keys!(
     pub TagKey,

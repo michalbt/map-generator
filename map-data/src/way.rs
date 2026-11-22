@@ -3,11 +3,10 @@ use std::{collections::HashMap, ops::Deref};
 use slotmap::new_key_type;
 
 use crate::{
-    KeyedMapping, TagKey,
     node::NodeKey,
     object::{OsmId, impl_object},
     relation::RelationKey,
-    tags::Tags,
+    tags::{TagKey, Tags},
 };
 
 const AREA_POSITIVE_VALUE: &str = "yes";
@@ -45,16 +44,12 @@ impl Way {
         match (self.nodes.first(), self.nodes.last()) {
             (Some(first), Some(last)) => {
                 first == last
-                    && match self
-                        .tags
-                        .get(&KeyedMapping::<TagKey>::AREA_KEY)
-                        .map(Deref::deref)
-                    {
+                    && match self.tags.get(&TagKey::AREA_KEY).map(Deref::deref) {
                         Some("yes") => true,
                         Some("no") => false,
                         _ => {
-                            !self.tags.contains_key(&KeyedMapping::<TagKey>::HIGHWAY_KEY)
-                                && !self.tags.contains_key(&KeyedMapping::<TagKey>::BARRIER_KEY)
+                            !self.tags.contains_key(&TagKey::HIGHWAY_KEY)
+                                && !self.tags.contains_key(&TagKey::BARRIER_KEY)
                         }
                     }
             }
