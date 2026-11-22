@@ -3,7 +3,6 @@ use std::ops::{Index, IndexMut};
 use slotmap::SlotMap;
 
 use crate::{
-    area::{Area, AreaKey, AreaSource, Ring},
     keyed_mapping::KeyedMapping,
     location::Location,
     node::{Node, NodeKey},
@@ -18,7 +17,6 @@ use crate::{
 pub struct Storage {
     nodes: SlotMap<NodeKey, Node>,
     ways: SlotMap<WayKey, Way>,
-    areas: SlotMap<AreaKey, Area>,
     relations: SlotMap<RelationKey, Relation>,
     map_span: Span,
     tag_mapping: KeyedMapping<TagKey>,
@@ -34,7 +32,6 @@ impl Storage {
         Storage {
             nodes: SlotMap::with_key(),
             ways: SlotMap::with_key(),
-            areas: SlotMap::with_key(),
             relations: SlotMap::with_key(),
             map_span,
             tag_mapping,
@@ -105,9 +102,7 @@ impl Storage {
 
     pub fn delete_way(&mut self, key: WayKey) -> Result<Way, ObjectDeleteError> {
         let way = self.ways.get(key).ok_or(ObjectDeleteError::NotPresent)?;
-        if !way.formed_areas().is_empty() {
-            Err(ObjectDeleteError::ContainedInArea)
-        } else if !way.containing_relations().is_empty() {
+        if !way.containing_relations().is_empty() {
             Err(ObjectDeleteError::ContainedInRelation)
         } else {
             for &node_key in way.nodes() {
@@ -122,60 +117,6 @@ impl Storage {
 
     pub fn iter_ways(&self) -> impl Iterator<Item = (WayKey, &Way)> {
         self.ways.iter()
-    }
-
-    pub fn contains_area(&self, key: AreaKey) -> bool {
-        self.areas.contains_key(key)
-    }
-
-    pub fn insert_area(&mut self, area: Area) -> AreaKey {
-        let area_key = self.areas.insert(area);
-        for ring in self.areas[area_key].rings() {
-            for &way_key in &ring.ways {
-                self.ways[way_key].add_formed_area(area_key);
-            }
-        }
-        area_key
-    }
-
-    pub fn create_area(&mut self, rings: Vec<Ring>) -> AreaKey {
-        self.insert_area(Area::new(None, AreaSource::None, rings))
-    }
-
-    pub fn add_ring_to_area(&mut self, area_key: AreaKey, ring: Ring) {
-        for &way_key in &ring.ways {
-            self[way_key].add_formed_area(area_key);
-        }
-        self[area_key].rings_mut().push(ring);
-    }
-
-    pub fn remove_ring_from_area(&mut self, area_key: AreaKey, ring_index: usize) -> Ring {
-        let ring = self[area_key].rings_mut().remove(ring_index);
-        for &way_key in &ring.ways {
-            self[way_key].remove_formed_area(area_key);
-        }
-        ring
-    }
-
-    pub fn delete_area(&mut self, key: AreaKey) -> Result<Area, ObjectDeleteError> {
-        let area = self.areas.get(key).ok_or(ObjectDeleteError::NotPresent)?;
-        if !area.containing_relations().is_empty() {
-            Err(ObjectDeleteError::ContainedInRelation)
-        } else {
-            for ring in area.rings() {
-                for &way_key in &ring.ways {
-                    self.ways[way_key].remove_formed_area(key);
-                }
-            }
-            Ok(self
-                .areas
-                .remove(key)
-                .expect("already checked that the object is present"))
-        }
-    }
-
-    pub fn iter_areas(&self) -> impl Iterator<Item = (AreaKey, &Area)> {
-        self.areas.iter()
     }
 
     pub fn contains_relation(&self, key: RelationKey) -> bool {
@@ -251,13 +192,10 @@ impl Storage {
         let ways = self
             .iter_ways()
             .map(|(way_key, way)| (ObjectKey::Way(way_key), way as &dyn Object));
-        let areas = self
-            .iter_areas()
-            .map(|(area_key, area)| (ObjectKey::Area(area_key), area as &dyn Object));
         let relations = self.iter_relations().map(|(relation_key, relation)| {
             (ObjectKey::Relation(relation_key), relation as &dyn Object)
         });
-        nodes.chain(ways).chain(areas).chain(relations)
+        nodes.chain(ways).chain(relations)
     }
 }
 
@@ -281,7 +219,6 @@ macro_rules! impl_index {
 
 impl_index!(NodeKey, Node, nodes);
 impl_index!(WayKey, Way, ways);
-impl_index!(AreaKey, Area, areas);
 impl_index!(RelationKey, Relation, relations);
 
 impl Index<ObjectKey> for Storage {
@@ -291,7 +228,6 @@ impl Index<ObjectKey> for Storage {
         match index {
             ObjectKey::Node(node_key) => &self[node_key],
             ObjectKey::Way(way_key) => &self[way_key],
-            ObjectKey::Area(area_key) => &self[area_key],
             ObjectKey::Relation(relation_key) => &self[relation_key],
         }
     }
@@ -302,7 +238,6 @@ impl IndexMut<ObjectKey> for Storage {
         match index {
             ObjectKey::Node(node_key) => &mut self[node_key],
             ObjectKey::Way(way_key) => &mut self[way_key],
-            ObjectKey::Area(area_key) => &mut self[area_key],
             ObjectKey::Relation(relation_key) => &mut self[relation_key],
         }
     }
@@ -312,7 +247,6 @@ impl IndexMut<ObjectKey> for Storage {
 pub enum ObjectDeleteError {
     NotPresent,
     ContainedInWay,
-    ContainedInArea,
     ContainedInRelation,
 }
 
@@ -320,7 +254,7 @@ impl ObjectDeleteError {
     pub fn is_contained_in_object(self) -> bool {
         match self {
             Self::NotPresent => false,
-            Self::ContainedInWay | Self::ContainedInArea | Self::ContainedInRelation => true,
+            Self::ContainedInWay | Self::ContainedInRelation => true,
         }
     }
 }

@@ -219,7 +219,7 @@ fn parse_test_content<'i>(
 ) -> Result<TagOrRoleTest, MapCssParseError<'i>> {
     if let Ok(()) = input.try_parse(|inp| inp.expect_delim('!')) {
         TagKeyOrPseudoTag::parse(input, ctx).map(|t| match t {
-            TagKeyOrPseudoTag::Role => TagOrRoleTest::RoleTest(RoleTest::RoleNotSet),
+            TagKeyOrPseudoTag::Role => TagOrRoleTest::RoleTest(RoleTest::NotSet),
             TagKeyOrPseudoTag::TagKey(tag_key) => TagOrRoleTest::TagTest(TagTest::NotSet(tag_key)),
         })
     } else if let Ok(tag_key_or_pseudo_tag) =
@@ -228,11 +228,11 @@ fn parse_test_content<'i>(
         // Order is important: operators must be before their prefixes ('=~' before '=' etc.)
         match tag_key_or_pseudo_tag {
             TagKeyOrPseudoTag::Role => (if let Ok(()) = input.try_parse(parse_not_equal_operator) {
-                RelationRoleKey::parse(input, ctx).map(move |value| RoleTest::RoleNotEqual(value))
+                RelationRoleKey::parse(input, ctx).map(move |value| RoleTest::NotEqual(value))
             } else if let Ok(()) = input.try_parse(parse_equal_operator) {
-                RelationRoleKey::parse(input, ctx).map(move |value| RoleTest::RoleEqual(value))
+                RelationRoleKey::parse(input, ctx).map(move |value| RoleTest::Equal(value))
             } else if let Ok(()) = input.try_parse(|inp| inp.expect_exhausted()) {
-                Ok(RoleTest::RoleSet)
+                Ok(RoleTest::Set)
             } else {
                 Err(input.new_custom_error(MapCssErrorKind::InvalidTokenInsideRoleTest))
             })

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, str::FromStr};
 
-use map_data::{AreaSource, KeyedMapping, ObjectKey, RelationRoleKey, Storage, TagKey};
+use map_data::{KeyedMapping, ObjectKey, RelationRoleKey, Storage, TagKey};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct SelectorAlternatives {
@@ -76,14 +76,6 @@ impl SelectorChain {
                             .map(|&k| ObjectKey::Way(k)),
                     );
                 }
-                if let ObjectKey::Way(way_key) = key {
-                    parent_objects.extend(
-                        storage[way_key]
-                            .formed_areas()
-                            .iter()
-                            .map(|&k| ObjectKey::Area(k)),
-                    )
-                }
                 parent_objects.iter().any(|&parent_key| {
                     Self::selector_subchain_matches(
                         parent_selector,
@@ -143,22 +135,18 @@ pub(crate) enum ObjectType {
 }
 
 impl ObjectType {
-    // TODO: refactor after Area removal, ideally to not use &Storage
     fn matches(&self, key: ObjectKey, storage: &Storage) -> bool {
         match (*self, key) {
             (Self::Node, ObjectKey::Node(_)) => true,
             (Self::Node, _) => false,
             (Self::Way, ObjectKey::Way(_)) => true,
-            (Self::Way, ObjectKey::Area(area_key)) => storage[area_key].source() == AreaSource::Way,
             (Self::Way, _) => false,
             (Self::Relation, ObjectKey::Relation(_)) => true,
-            (Self::Relation, ObjectKey::Area(area_key)) => {
-                storage[area_key].source() == AreaSource::Relation
-            }
             (Self::Relation, _) => false,
-            (Self::Area, ObjectKey::Area(_)) => true,
+            (Self::Area, ObjectKey::Way(way_key)) => storage[way_key].defines_area(),
+            (Self::Area, ObjectKey::Relation(relation_key)) => storage[relation_key].defines_area(),
             (Self::Area, _) => false,
-            (Self::Line, ObjectKey::Way(_)) => true,
+            (Self::Line, ObjectKey::Way(way_key)) => !storage[way_key].defines_area(),
             (Self::Line, _) => false,
             (Self::Canvas, _) => false,
             (Self::Any, _) => true,
@@ -215,20 +203,20 @@ impl TagTest {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum RoleTest {
-    RoleSet,
-    RoleNotSet,
-    RoleEqual(RelationRoleKey),
-    RoleNotEqual(RelationRoleKey),
+    Set,
+    NotSet,
+    Equal(RelationRoleKey),
+    NotEqual(RelationRoleKey),
 }
 
 impl RoleTest {
     fn matches(&self, role: Option<RelationRoleKey>) -> bool {
         const EMPTY_ROLE_KEY: RelationRoleKey = KeyedMapping::<RelationRoleKey>::EMPTY_ROLE_KEY;
         match self {
-            Self::RoleSet => role != Some(EMPTY_ROLE_KEY),
-            Self::RoleNotSet => role == Some(EMPTY_ROLE_KEY),
-            Self::RoleEqual(key) => role == Some(*key),
-            Self::RoleNotEqual(key) => role != Some(*key),
+            Self::Set => role != Some(EMPTY_ROLE_KEY),
+            Self::NotSet => role == Some(EMPTY_ROLE_KEY),
+            Self::Equal(key) => role == Some(*key),
+            Self::NotEqual(key) => role != Some(*key),
         }
     }
 }

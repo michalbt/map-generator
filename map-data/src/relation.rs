@@ -1,13 +1,16 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Deref};
 
 use slotmap::new_key_type;
 
 use crate::{
+    TagKey,
     keyed_mapping::KeyedMappingKey,
     object::{ObjectKey, OsmId, impl_object},
     tags::Tags,
     use_keyed_mapping_with_well_known_keys,
 };
+
+const RELATION_TYPE_MULTIPOLYGON: &str = "multipolygon";
 
 new_key_type! { pub struct RelationKey; }
 
@@ -35,6 +38,13 @@ impl Relation {
 
     pub fn members_mut(&mut self) -> &mut Vec<RelationMember> {
         &mut self.members
+    }
+
+    pub fn defines_area(&self) -> bool {
+        self.tags
+            .get(&KeyedMapping::<TagKey>::TYPE_KEY)
+            .map(Deref::deref)
+            == Some(RELATION_TYPE_MULTIPOLYGON)
     }
 }
 

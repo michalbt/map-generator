@@ -1,14 +1,17 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Deref};
 
 use slotmap::new_key_type;
 
 use crate::{
-    area::AreaKey,
+    KeyedMapping, TagKey,
     node::NodeKey,
     object::{OsmId, impl_object},
     relation::RelationKey,
     tags::Tags,
 };
+
+const AREA_POSITIVE_VALUE: &str = "yes";
+const AREA_NEGATIVE_VALUE: &str = "no";
 
 new_key_type! { pub struct WayKey; }
 
@@ -17,7 +20,6 @@ pub struct Way {
     osm_id: OsmId,
     tags: Tags,
     nodes: Vec<NodeKey>,
-    formed_areas: Vec<AreaKey>,
     containing_relations: Vec<RelationKey>,
 }
 
@@ -27,7 +29,6 @@ impl Way {
             osm_id,
             tags: HashMap::new(),
             nodes,
-            formed_areas: vec![],
             containing_relations: vec![],
         }
     }
@@ -40,21 +41,25 @@ impl Way {
         &mut self.nodes
     }
 
-    pub fn formed_areas(&self) -> &[AreaKey] {
-        &self.formed_areas
-    }
-
-    pub(crate) fn add_formed_area(&mut self, key: AreaKey) {
-        self.formed_areas.push(key);
-    }
-
-    pub(crate) fn remove_formed_area(&mut self, key: AreaKey) {
-        let index = self
-            .formed_areas
-            .iter()
-            .position(|k| *k == key)
-            .expect("specified AreaKey is not a formed area for this Way");
-        self.formed_areas.swap_remove(index);
+    pub fn defines_area(&self) -> bool {
+        match (self.nodes.first(), self.nodes.last()) {
+            (Some(first), Some(last)) => {
+                first == last
+                    && match self
+                        .tags
+                        .get(&KeyedMapping::<TagKey>::AREA_KEY)
+                        .map(Deref::deref)
+                    {
+                        Some("yes") => true,
+                        Some("no") => false,
+                        _ => {
+                            !self.tags.contains_key(&KeyedMapping::<TagKey>::HIGHWAY_KEY)
+                                && !self.tags.contains_key(&KeyedMapping::<TagKey>::BARRIER_KEY)
+                        }
+                    }
+            }
+            _ => false,
+        }
     }
 }
 

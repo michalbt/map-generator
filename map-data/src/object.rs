@@ -1,7 +1,6 @@
 use derive_more::From;
 
 use crate::{
-    area::AreaKey,
     node::NodeKey,
     relation::RelationKey,
     tags::{TagKey, Tags},
@@ -14,7 +13,6 @@ pub type OsmId = Option<i64>;
 pub enum ObjectKey {
     Node(NodeKey),
     Way(WayKey),
-    Area(AreaKey),
     Relation(RelationKey),
 }
 
