@@ -90,31 +90,31 @@ pub(crate) struct Url(pub String);
 
 pub(crate) type IntegerList = Vec<Integer>;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FontWeight {
     Normal,
     Bold,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FontStyle {
     Normal,
     Italic,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FontVariant {
     Normal,
     SmallCaps,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TextDecoration {
     None,
     Underline,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TextTransform {
     None,
     Uppercase,
@@ -122,7 +122,7 @@ pub(crate) enum TextTransform {
     Capitalize,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TextPosition {
     Line,
     Center,

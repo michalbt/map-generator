@@ -118,7 +118,7 @@ impl BasicSelector {
     fn matches(&self, key: ObjectKey, storage: &Storage) -> bool {
         self.object_type.matches(key, storage) && {
             let object_tags = storage[key].tags();
-            self.tests.iter().all(|test| test.matches(&object_tags))
+            self.tests.iter().all(|test| test.matches(object_tags))
         }
     }
 }

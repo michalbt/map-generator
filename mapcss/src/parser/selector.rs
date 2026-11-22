@@ -228,9 +228,9 @@ fn parse_test_content<'i>(
         // Order is important: operators must be before their prefixes ('=~' before '=' etc.)
         match tag_key_or_pseudo_tag {
             TagKeyOrPseudoTag::Role => (if let Ok(()) = input.try_parse(parse_not_equal_operator) {
-                RelationRoleKey::parse(input, ctx).map(move |value| RoleTest::NotEqual(value))
+                RelationRoleKey::parse(input, ctx).map(RoleTest::NotEqual)
             } else if let Ok(()) = input.try_parse(parse_equal_operator) {
-                RelationRoleKey::parse(input, ctx).map(move |value| RoleTest::Equal(value))
+                RelationRoleKey::parse(input, ctx).map(RoleTest::Equal)
             } else if let Ok(()) = input.try_parse(|inp| inp.expect_exhausted()) {
                 Ok(RoleTest::Set)
             } else {

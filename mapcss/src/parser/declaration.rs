@@ -198,7 +198,7 @@ impl Parse for FontWeight {
             }
         }
         FontWeightMap::get(&identifier)
-            .map(Clone::clone)
+            .copied()
             .ok_or(input.new_custom_error(MapCssErrorKind::InvalidFontWeight))
     }
 }
@@ -218,7 +218,7 @@ impl Parse for FontStyle {
             }
         }
         FontStyleMap::get(&identifier)
-            .map(Clone::clone)
+            .copied()
             .ok_or(input.new_custom_error(MapCssErrorKind::InvalidFontStyle))
     }
 }
@@ -238,7 +238,7 @@ impl Parse for FontVariant {
             }
         }
         FontVariantMap::get(&identifier)
-            .map(Clone::clone)
+            .copied()
             .ok_or(input.new_custom_error(MapCssErrorKind::InvalidFontVariant))
     }
 }
@@ -258,7 +258,7 @@ impl Parse for TextDecoration {
             }
         }
         TextDecorationMap::get(&identifier)
-            .map(Clone::clone)
+            .copied()
             .ok_or(input.new_custom_error(MapCssErrorKind::InvalidTextDecoration))
     }
 }
@@ -280,7 +280,7 @@ impl Parse for TextTransform {
             }
         }
         TextTransformMap::get(&identifier)
-            .map(Clone::clone)
+            .copied()
             .ok_or(input.new_custom_error(MapCssErrorKind::InvalidTextTransform))
     }
 }
@@ -300,7 +300,7 @@ impl Parse for TextPosition {
             }
         }
         TextPositionMap::get(&identifier)
-            .map(Clone::clone)
+            .copied()
             .ok_or(input.new_custom_error(MapCssErrorKind::InvalidTextPosition))
     }
 }
