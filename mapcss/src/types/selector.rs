@@ -194,9 +194,9 @@ impl TagTest {
                 .get(tag_key)
                 .and_then(|s| s.parse::<TagNumericValue>().ok())
                 .is_some_and(|val| val >= *tag_value),
-            Self::Matches(tag_key, Regex(regex)) => object_tags
+            Self::Matches(tag_key, regex) => object_tags
                 .get(tag_key)
-                .is_some_and(|val| regex.is_match(val)),
+                .is_some_and(|val| regex.is_full_match(val)),
         }
     }
 }
@@ -277,7 +277,17 @@ impl PartialOrd<Self> for TagNumericValue {
 pub(crate) struct TagStringValue(pub String);
 
 #[derive(Clone, Debug)]
-pub(crate) struct Regex(pub regex::Regex);
+pub(crate) struct Regex(regex::Regex);
+
+impl Regex {
+    pub fn new(regex_string: &str) -> Result<Self, regex::Error> {
+        regex::Regex::new(regex_string).map(Self)
+    }
+
+    pub fn is_full_match(&self, string: &str) -> bool {
+        self.0.find(string).is_some_and(|m| m.len() == string.len())
+    }
+}
 
 impl PartialEq for Regex {
     fn eq(&self, other: &Self) -> bool {
